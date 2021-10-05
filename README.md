@@ -30,7 +30,7 @@ The connector is created for Windows PowerShell 5.1. This means that the connect
 > Older versions of Windows PowerShell are not supported.
 
 ## Complex connector
-This connector works is a bit complex due to the way HelloID works and how Salto expects the staging table to be filled.
+The way this connector works is a bit complex due to the way HelloID works and how Salto expects the staging table to be filled.
 
 - HelloID Provisioning user actions are written to the HelloID User Staging table.
 - HelloID Provisioning permission actions are written to the HelloID Membership Staging table.
