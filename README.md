@@ -37,3 +37,6 @@ This connector works is a bit complex due to the way HelloID works and how Salto
 - A Service Automation Task is run every hour and only writes data when there's been no update to both tables within 30 minutes.
 - The Service Automation Task combines both tables and merges them into the current Salto Staging table.
 - In Salto Space there's a job that imports the Salto Space staging table into Salto Space.
+
+	# HelloID Docs
+	The official HelloID documentation can be found at: https://docs.helloid.com/
