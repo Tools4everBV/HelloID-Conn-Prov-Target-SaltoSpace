@@ -31,7 +31,7 @@ The connector is created for Windows PowerShell 5.1. This means that the connect
 
 ## Complex connector
 The way this connector works is a bit complex due to the way HelloID works and how Salto expects the staging table to be filled.
-hello world
+
 - HelloID Provisioning user actions are written to the HelloID User Staging table.
 - HelloID Provisioning permission actions are written to the HelloID Membership Staging table.
 - A Service Automation Task is run every hour and only writes data when there's been no update to both tables within 30 minutes.
