@@ -1,6 +1,6 @@
 #Limited access group script
-# This script is almost the same as the Access Group script, with one minor change: 
-#   the group id is not part of the id creation, so there can only be one group assigned. 
+# This script is almost the same as the Access Group script, with one minor change:
+#   the group id is not part of the id creation, so there can only be one group assigned.
 #   When a second group is assigned, an error is generated.
 $aRef = $accountReference | ConvertFrom-Json
 $o = $operation | ConvertFrom-Json
@@ -23,6 +23,9 @@ $permissionMembership = @{
     accountReference      = $aRef
 }
 
+$sqlDatabaseHelloIdAccountTable = $config.connection.table.helloid_user
+$queryAccountToBeProcessedBySalto = "UPDATE [$sqlDatabaseHelloId].[dbo].[$sqlDatabaseHelloIdAccountTable]  SET [ToBeProcessedBySalto] = 1 WHERE ExtUserId = @accountReference;"
+
 # Set id to the hash of the other three values to make sure a permission can only be set once
 $permissionMembership.id = -join [security.cryptography.sha256managed]::new().ComputeHash([Text.Encoding]::Utf8.GetBytes("$($permissionMembership.permissionType)_$($permissionMembership.accountReference)")).ForEach{$_.ToString("X2")}
 $queryCheckPermission = "SELECT id FROM $sqlTableMembership WHERE id=@id"
@@ -35,7 +38,7 @@ $oDisplay = "$($o)ed" -Replace "ee","e"
 
 try {
     if ($o -eq "grant" -or $o -eq "revoke") {
-        
+
         # Connect to the SQL server
         $sqlConnection = New-Object System.Data.SqlClient.SqlConnection
         $sqlConnection.ConnectionString = $sqlConnectionString
@@ -56,8 +59,15 @@ try {
             $sqlCmd.CommandText = Get-Variable -Name "query$($o)Permission" -ValueOnly
             if (-not($dryRun -eq $true)) {
                 $null = $SqlCmd.ExecuteNonQuery()
+
+                # Run account query
+                $sqlCmd = New-Object System.Data.SqlClient.SqlCommand
+                $sqlCmd.Connection = $sqlConnection
+                $sqlCmd.CommandText = $queryAccountToBeProcessedBySalto
+                $permissionMembership.Keys | Foreach-Object { $null = $sqlCmd.Parameters.Add("@" + $_, "$($permissionMembership.Item($_))") }
+                $null = $SqlCmd.ExecuteNonQuery()
             } else {
-                Write-Verbose -Verbose -Message "DryRun enabled, not executing query '$($sqlCmd.CommandText)'"    
+                Write-Verbose -Verbose -Message "DryRun enabled, not executing query '$($sqlCmd.CommandText)'"
             }
             $auditMessage =  "$oDisplay access to $($permissionType) Group with external Id $($permissionMembership.permissionReference)"
             $success = $true

@@ -1,9 +1,9 @@
-$config = $configuration | ConvertFrom-Json 
+$config = $configuration | ConvertFrom-Json
 $sqlInstance = $config.connection.server
 $sqlDatabaseSaltoSpace = $config.connection.database.salto_space
 $sqlConnectionString = "Server=$sqlInstance;Database=$sqlDatabaseSaltoSpace;Trusted_Connection=True;Integrated Security=true;"
 
-$sqlQueryAccessGroupsList = 'SELECT 
+$sqlQueryAccessGroupsList = 'SELECT
                 groups.id_group
                 ,groups.name
                 ,groups.Description
@@ -16,7 +16,7 @@ try {
     $sqlConnection = New-Object System.Data.SqlClient.SqlConnection
     $sqlConnection.ConnectionString = $sqlConnectionString
     $sqlConnection.Open()
-      
+
     $sqlCmd = New-Object System.Data.SqlClient.SqlCommand
     $sqlCmd.Connection = $sqlConnection
     $sqlCmd.CommandText = $sqlQueryAccessGroupsList
@@ -34,6 +34,6 @@ try {
         Write-Output ($permission | ConvertTo-Json -Depth 2)
     }
 } catch {
-    write-verbose -verbose $_.Exception.Message
-    write-verbose -verbose ($_.InvocationInfo | convertTo-Json)
+    write-verbose -Verbose -Message $_.Exception.Message
+    write-verbose -Verbose -Message ($_.InvocationInfo | convertTo-Json)
 }

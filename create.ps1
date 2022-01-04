@@ -4,7 +4,7 @@ $success = $false
 $auditMessage = "Account for person " + $p.DisplayName + " not created succesfully"
 
 #Initialize SQL properties
-$config = $configuration | ConvertFrom-Json 
+$config = $configuration | ConvertFrom-Json
 $sqlInstance = $config.connection.server
 $sqlDatabaseHelloId = $config.connection.database.salto_interfaces
 $sqlDatabaseSaltoSpace = $config.connection.database.salto_space
@@ -32,7 +32,6 @@ if ($p.PrimaryContract.Title.Name.length -gt 31)  {$p.PrimaryContract.Title.Name
 # Enddate
 if ([string]::IsNullOrEmpty($p.PrimaryContract.EndDate)) {
     $p.PrimaryContract | Add-Member -NotePropertyName EndDate -NotePropertyValue '2099-12-01T00:00:00Z' -Force
-    #$p.PrimaryContract.EndDate = '2099-12-01T00:00:00Z'
 }
 
 try {
@@ -84,6 +83,7 @@ try {
                             ,[UserExpiration.ExpDate]
                         --  ,[STKE.Period]
                         --  ,[STKE.UnitOfPeriod]
+                            ,ToBeProcessedBySalto
                         ) VALUES (
                              @Action
                             ,@ExtUserID
@@ -105,10 +105,11 @@ try {
                             ,@UserExpiration_ExpDate
                         --  ,@STKE_Period
                         --  ,@STKE_UnitOfPeriod
+                            ,1
                         );"
-     
-    $queryAccountUpdate = "UPDATE [$sqlDatabaseHelloId].[dbo].[$sqlDatabaseHelloIdAccountTable] 
-                            SET               
+
+    $queryAccountUpdate = "UPDATE [$sqlDatabaseHelloId].[dbo].[$sqlDatabaseHelloIdAccountTable]
+                            SET
                                  [Action] = @Action
                                 ,[ExtUserID] = @ExtUserID
                                 ,[FirstName] = @FirstName
@@ -125,8 +126,9 @@ try {
                             --  ,[AutoKeyEdit.ROMCode] = @AutoKeyEdit_ROMCode
                                 ,[UserActivation] = @UserActivation
                                 ,[UserExpiration.ExpDate] = @UserExpiration_ExpDate
-                                ,[STKE.Period] = @STKE_Period
+                            --  ,[STKE.Period] = @STKE_Period
                             --  ,[STKE.UnitOfPeriod] = @STKE_UnitOfPeriod
+                                ,ToBeProcessedBySalto = 1
                             WHERE ExtUserId = @ExtUserId;"
 
     # Connect to the SQL server
@@ -149,26 +151,26 @@ try {
     $accountExists.Close()
 
     # Check if user already exists in the Salto Database
-    write-verbose -verbose "$lookupResult"
+    write-verbose -Verbose -Message "$lookupResult"
     Switch ($lookupResult.count) {
         0 {
-            Write-Verbose -Verbose "Account record does not exist. Creating account record for person '$($p.displayName)' with ExtUserId '$($account.ExtUserId)'"
+            Write-Verbose -Verbose -Message "Account record does not exist. Creating account record for person '$($p.displayName)' with ExtUserId '$($account.ExtUserId)'"
         }
         1 {
             $account.ExtUserID = $lookupResult[0]
-            Write-Verbose -Verbose "Account record exists in the Salto Space database. Correlating account record for person '$($p.displayName)' with ExtUserId '$($account.ExtUserId)'"
+            Write-Verbose -Verbose -Message "Account record exists in the Salto Space database. Correlating account record for person '$($p.displayName)' with ExtUserId '$($account.ExtUserId)'"
         }
         default {
             # TODO:"Implement audit stuff here
             throw "Multiple ($($lookupResult.count)) account records found for employeeId '$($p.externalId)' : " + ($lookupResult | convertTo-Json)
         }
     }
-    
+
     # Next check if user exists in the HelloID staging table
     $sqlCmd = New-Object System.Data.SqlClient.SqlCommand
     $sqlCmd.Connection = $sqlConnection
     $sqlCmd.CommandText = $queryAccountLookupHelloId
-    write-verbose -verbose $sqlCmd.CommandText
+    #write-verbose -verbose -Message $sqlCmd.CommandText
     $account.Keys | Foreach-Object { $null = $sqlCmd.Parameters.Add("@" + $_, "$($account.Item($_))") }
     $accountExists = $SqlCmd.ExecuteReader()
     $lookupResult = @()
@@ -178,17 +180,15 @@ try {
         }
     }
     $accountExists.Close()
-    #write-verbose -verbose "$lookupResult"
+
     # Check if user already exists in the HelloID database
     Switch ($lookupResult.count) {
          0 {
             $queryAccount = $queryAccountCreate
-            #write-verbose -verbose "TEZZT $lookupResult"
-            Write-Verbose -Verbose "Account record does not exist in the HelloID database. Creating account record for person '$($p.displayName)' and ExtUserId '$($account.ExtUserId)'"
+            Write-Verbose -Verbose -Message "Account record does not exist in the HelloID database. Creating account record for person '$($p.displayName)' and ExtUserId '$($account.ExtUserId)'"
         } 1 {
             $queryAccount = $queryAccountUpdate
-            #write-verbose -verbose "TESST $lookupResult"
-            Write-Verbose -Verbose "Account record exists in the HelloID database. Updating account record for person '$($p.displayName)' and ExtUserId '$($account.ExtUserId)'"
+            Write-Verbose -Verbose -Message "Account record exists in the HelloID database. Updating account record for person '$($p.displayName)' and ExtUserId '$($account.ExtUserId)'"
         } default {
             # TODO:"Implement audit stuff here
             throw "Multiple ($($lookupResult.count)) account records found in the HelloID database for ExtUserId '$accountReference' : " + ($lookupResult | convertTo-Json)
@@ -206,27 +206,27 @@ try {
         $null = $SqlCmd.ExecuteNonQuery()
         $success = $true
         $auditMessage = "Created account record for person '$($p.displayName)' and ExtUserId '$($account.ExtUserId)' succesfully"
-        Write-Verbose -Verbose "Created account record for person '$($p.displayName)' and ExtUserId '$($account.ExtUserId)' succesfully"
+        Write-Verbose -Verbose -Message "Created account record for person '$($p.displayName)' and ExtUserId '$($account.ExtUserId)' succesfully"
     }
 } catch {
     if (![string]::IsNullOrEmpty($_.ErrorDetails.Message)) {
-        Write-Verbose -Verbose "Something went wrong $($_.ScriptStackTrace). Error message: '$($_.ErrorDetails.Message)'" 
+        Write-Verbose -Verbose -Message "Something went wrong $($_.ScriptStackTrace). Error message: '$($_.ErrorDetails.Message)'"
         $auditMessage = "Account record not created succesfully: '$($_.ErrorDetails.Message)'"
     } else {
-        Write-Verbose -Verbose "Something went wrong $($_.ScriptStackTrace). Error message: '$($_)'" 
-        $auditMessage = "Account record not created succesfully: '$($_)'" 
-    }        
+        Write-Verbose -Verbose -Message "Something went wrong $($_.ScriptStackTrace). Error message: '$($_)'"
+        $auditMessage = "Account record not created succesfully: '$($_)'"
+    }
 } finally {
     $sqlConnection.Close()
 }
 
 #build up result
-$result = [PSCustomObject]@{ 
+$result = [PSCustomObject]@{
     Success          = $success
     AccountReference = $account.ExtUserID
     AuditDetails     = $auditMessage
     Account          = $account
-    
+
     # Optionally return data for use in other systems
     ExportData = [PSCustomObject]@{}
 }
