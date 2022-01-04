@@ -11,30 +11,31 @@ $sqlDatabaseHelloId = $config.connection.database.salto_interfaces
 $sqlDatabaseHelloIdAccountTable = $config.connection.table.helloid_user
 $sqlConnectionString = "Server=$sqlInstance;Database=$sqlDatabaseHelloId;Trusted_Connection=True;Integrated Security=true;"
 
-#Naming convention
-if(-Not([string]::IsNullOrEmpty($p.Name.FamilyNamePrefix))) { $prefix = $p.Name.FamilyNamePrefix + " " }
-if(-Not([string]::IsNullOrEmpty($p.Name.FamilyNamePartnerPrefix))) { $partnerprefix = $p.Name.FamilyNamePartnerPrefix + " " }
-
-# Enddate
-if ([string]::IsNullOrEmpty($p.PrimaryContract.EndDate)) {
-    $p.PrimaryContract | Add-Member -NotePropertyName EndDate -NotePropertyValue '2099-12-01T00:00:00Z' -Force
-}
-
-#Write-Verbose -Verbose $person
-Switch ($p.Name.Convention) {
-    "B" {$surname += $prefix + $p.Name.FamilyName}
-    "P" {$surname += $partnerprefix + $p.Name.FamilyNamePartner}
-    "BP" {$surname += $prefix + $p.Name.FamilyName + " - " + $partnerprefix + $p.Name.FamilyNamePartner}
-    "PB" {$surname += $partnerprefix + $p.Name.FamilyNamePartner + " - " + $prefix + $p.Name.FamilyName}
-    default {$surname += $prefix + $p.Name.FamilyName}
-}
-
-#Most fields can only be 32 chars long...
-if ($p.PrimaryContract.Department.DisplayName.length -gt 31)  {$p.PrimaryContract.Department = $p.PrimaryContract.Department.DisplayName.subString(0,31)}
-if ($p.PrimaryContract.CostCenter.Name.length -gt 31)  {$p.PrimaryContract.CostCenter.Name = $p.PrimaryContract.CostCenter.Name.subString(0,31)}
-if ($p.PrimaryContract.Title.Name.length -gt 31)  {$p.PrimaryContract.Title.Name = $p.PrimaryContract.Title.Name.subString(0,31)}
-
 try {
+    #Naming convention
+    if(-Not([string]::IsNullOrEmpty($p.Name.FamilyNamePrefix))) { $prefix = $p.Name.FamilyNamePrefix + " " }
+    if(-Not([string]::IsNullOrEmpty($p.Name.FamilyNamePartnerPrefix))) { $partnerprefix = $p.Name.FamilyNamePartnerPrefix + " " }
+
+    # Enddate
+    if ([string]::IsNullOrEmpty($p.PrimaryContract.EndDate)) {
+        $p.PrimaryContract | Add-Member -NotePropertyName EndDate -NotePropertyValue '2099-12-01T00:00:00Z' -Force
+    }
+
+    #Write-Verbose -Verbose $person
+    Switch ($p.Name.Convention) {
+        "B" {$surname += $prefix + $p.Name.FamilyName}
+        "P" {$surname += $partnerprefix + $p.Name.FamilyNamePartner}
+        "BP" {$surname += $prefix + $p.Name.FamilyName + " - " + $partnerprefix + $p.Name.FamilyNamePartner}
+        "PB" {$surname += $partnerprefix + $p.Name.FamilyNamePartner + " - " + $prefix + $p.Name.FamilyName}
+        default {$surname += $prefix + $p.Name.FamilyName}
+    }
+
+    #Most fields can only be 32 chars long...
+    if ($p.PrimaryContract.Department.DisplayName.length -gt 31)  {$p.PrimaryContract.Department = $p.PrimaryContract.Department.DisplayName.subString(0,31)}
+    if ($p.PrimaryContract.CostCenter.Name.length -gt 31)  {$p.PrimaryContract.CostCenter.Name = $p.PrimaryContract.CostCenter.Name.subString(0,31)}
+    if ($p.PrimaryContract.Title.Name.length -gt 31)  {$p.PrimaryContract.Title.Name = $p.PrimaryContract.Title.Name.subString(0,31)}
+
+
     $account = @{
         Action                                  = 3
         ExtUserID                               = $aRef
