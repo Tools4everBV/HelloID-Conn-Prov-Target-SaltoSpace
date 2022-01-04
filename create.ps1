@@ -59,7 +59,7 @@ try {
         #STKE_UnitOfPeriod                      = $null
     }
 
-    $queryAccountLookupSaltoSpace = "SELECT ExtID FROM [$sqlDatabaseSaltoSpace].[dbo].[tb_Users] INNER JOIN [SALTO_SPACE].[dbo].[tb_Users_Ext] ON tb_Users.id_user = tb_Users_Ext.id_user WHERE $correlationAccountFieldSaltoSpace = @$correlationAccountFieldSaltoStaging"
+    $queryAccountLookupSaltoSpace = "SELECT ExtID FROM [$sqlDatabaseSaltoSpace].[dbo].[tb_Users] INNER JOIN [$sqlDatabaseSaltoSpace].[dbo].[tb_Users_Ext] ON tb_Users.id_user = tb_Users_Ext.id_user WHERE $correlationAccountFieldSaltoSpace = @$correlationAccountFieldSaltoStaging"
     $queryAccountLookupHelloId  = "SELECT ExtUserId FROM [$sqlDatabaseHelloId].[dbo].[$sqlDatabaseHelloIdAccountTable] WHERE ExtUserId = @ExtUserId"
 
     $queryAccountCreate = "INSERT INTO [$sqlDatabaseHelloId].[dbo].[$sqlDatabaseHelloIdAccountTable] (
