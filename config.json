@@ -10,17 +10,6 @@
     }
   },
   {
-    "key": "connection.database.salto_space",
-    "type": "input",
-    "defaultValue": "",
-    "templateOptions": {
-      "label": "Salto Space database name",
-      "placeholder": "Please enter the name of the Salto Space database",
-      "description": "",
-      "required": true
-    }
-  },
-  {
     "key": "connection.database.salto_interfaces",
     "type": "input",
     "defaultValue": "",
@@ -43,42 +32,11 @@
     }
   },
   {
-    "key": "connection.table.helloid_user",
-    "type": "input",
-    "defaultValue": "HelloIdUser",
-    "templateOptions": {
-      "label": "HelloID user table name",
-      "placeholder": "Please enter the name of the HelloID user table",
-      "description": "",
-      "required": true
-    }
-  },
-  {
-    "key": "connection.table.helloid_membership",
-    "type": "input",
-    "defaultValue": "HelloIdMembership",
-    "templateOptions": {
-      "label": "HelloID membership table name",
-      "placeholder": "Please enter the name of the HelloID membership table",
-      "description": "",
-      "required": true
-    }
-  },
-  {
     "key": "correlationAccountFieldSaltoStaging",
     "type": "input",
     "defaultValue": "GPF2",
     "templateOptions": {
       "label": "Account correlation field in Salto Staging table",
-      "required": true
-    }
-  },
-  {
-    "key": "correlationAccountFieldSaltoSpace",
-    "type": "input",
-    "defaultValue": "DUMMY2",
-    "templateOptions": {
-      "label": "Account Correlation Field in Salto Space database",
       "required": true
     }
   }
