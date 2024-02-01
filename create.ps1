@@ -1,3 +1,4 @@
+$dryrun=$false
 #Initialize default properties
 $p = $person | ConvertFrom-Json
 $success = $false
@@ -8,7 +9,7 @@ $config = $configuration | ConvertFrom-Json
 $sqlInstance = $config.connection.server
 $sqlDatabaseHelloId = $config.connection.database.salto_interfaces
 $sqlDatabaseSaltoSpace = $config.connection.database.salto_space
-$sqlDatabaseHelloIdAccountTable = $config.connection.table.helloid_user
+$sqlDatabaseHelloIdAccountTable = $config.connection.table.salto_staging
 $sqlConnectionString = "Server=$sqlInstance;Database=$sqlDatabaseHelloId;Trusted_Connection=True;Integrated Security=true;"
 $correlationAccountFieldSaltoSpace = $config.correlationAccountFieldSaltoSpace
 $correlationAccountFieldSaltoStaging = $config.correlationAccountFieldSaltoStaging
@@ -59,7 +60,7 @@ try {
         #STKE_UnitOfPeriod                      = $null
     }
 
-    $queryAccountLookupSaltoSpace = "SELECT ExtID FROM [$sqlDatabaseSaltoSpace].[dbo].[tb_Users] INNER JOIN [$sqlDatabaseSaltoSpace].[dbo].[tb_Users_Ext] ON tb_Users.id_user = tb_Users_Ext.id_user WHERE $correlationAccountFieldSaltoSpace = @$correlationAccountFieldSaltoStaging"
+    #$queryAccountLookupSaltoSpace = "SELECT ExtID FROM [$sqlDatabaseSaltoSpace].[dbo].[tb_Users] INNER JOIN [$sqlDatabaseSaltoSpace].[dbo].[tb_Users_Ext] ON tb_Users.id_user = tb_Users_Ext.id_user WHERE $correlationAccountFieldSaltoSpace = @$correlationAccountFieldSaltoStaging"
     $queryAccountLookupHelloId  = "SELECT ExtUserId FROM [$sqlDatabaseHelloId].[dbo].[$sqlDatabaseHelloIdAccountTable] WHERE ExtUserId = @ExtUserId"
 
     $queryAccountCreate = "INSERT INTO [$sqlDatabaseHelloId].[dbo].[$sqlDatabaseHelloIdAccountTable] (
@@ -71,7 +72,7 @@ try {
                         --  ,[Office]
                             ,[AuditOpenings]
                         --  ,[ExtendedOpeningTimeEnabled]
-                            ,[AntipassbackEnabled]
+                         --   ,[AntipassbackEnabled]
                         --  ,[CalendarID]
                             ,[GPF1]
                             ,[GPF2]
@@ -93,7 +94,7 @@ try {
                         --  ,@Office
                             ,@AuditOpenings
                         --  ,@ExtendedOpeningTimeEnabled
-                            ,@AntipassbackEnabled
+                        --    ,@AntipassbackEnabled
                         --  ,@CalendarID
                             ,@GPF1
                             ,@GPF2
@@ -116,7 +117,7 @@ try {
                             --  ,[Title] = @Title
                             --  ,[Office] = @Office
                             --   ,[ExtendedOpeningTimeEnabled] = @ExtendedOpeningTimeEnabled
-                                ,[AntipassbackEnabled] = @AntipassbackEnabled
+                            --    ,[AntipassbackEnabled] = @AntipassbackEnabled
                             --  ,[CalendarID] = @CalendarID
                                 ,[GPF1] = @GPF1
                                 ,[GPF2] = @GPF2
@@ -137,8 +138,9 @@ try {
     $sqlConnection.Open()
 
     #Lookup record in Salto Space database (correlation)
+    <#
     $sqlCmd = New-Object System.Data.SqlClient.SqlCommand
-    $sqlCmd.Connection = $sqlConnection
+    sqlCmd.Connection = $sqlConnection
     $sqlCmd.CommandText = $queryAccountLookupSaltoSpace
     $account.Keys | Foreach-Object { $null = $sqlCmd.Parameters.Add("@" + $_, "$($account.Item($_))") }
     $accountExists = $SqlCmd.ExecuteReader()
@@ -165,7 +167,7 @@ try {
             throw "Multiple ($($lookupResult.count)) account records found for employeeId '$($p.externalId)' : " + ($lookupResult | convertTo-Json)
         }
     }
-
+#>
     # Next check if user exists in the HelloID staging table
     $sqlCmd = New-Object System.Data.SqlClient.SqlCommand
     $sqlCmd.Connection = $sqlConnection
