@@ -1,4 +1,3 @@
-$dryRun =$false
 $aRef = $accountReference | ConvertFrom-Json
 $o = $operation | ConvertFrom-Json
 $pRef = $permissionReference | ConvertFrom-Json
