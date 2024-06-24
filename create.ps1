@@ -12,7 +12,6 @@ $sqlDatabaseSaltoSpace = $config.connection.database.salto_space
 $sqlDatabaseHelloIdAccountTable = $config.connection.table.salto_staging
 $sqlConnectionString = "Server=$sqlInstance;Database=$sqlDatabaseHelloId;Trusted_Connection=True;Integrated Security=true;"
 $correlationAccountFieldSaltoSpace = $config.correlationAccountFieldSaltoSpace
-$correlationAccountFieldSaltoStaging = $config.correlationAccountFieldSaltoStaging
 
 #Naming convention
 if(-Not([string]::IsNullOrEmpty($p.Name.FamilyNamePrefix))) { $prefix = $p.Name.FamilyNamePrefix + " " }
@@ -60,7 +59,6 @@ try {
         #STKE_UnitOfPeriod                      = $null
     }
 
-    #$queryAccountLookupSaltoSpace = "SELECT ExtID FROM [$sqlDatabaseSaltoSpace].[dbo].[tb_Users] INNER JOIN [$sqlDatabaseSaltoSpace].[dbo].[tb_Users_Ext] ON tb_Users.id_user = tb_Users_Ext.id_user WHERE $correlationAccountFieldSaltoSpace = @$correlationAccountFieldSaltoStaging"
     $queryAccountLookupHelloId  = "SELECT ExtUserId FROM [$sqlDatabaseHelloId].[dbo].[$sqlDatabaseHelloIdAccountTable] WHERE ExtUserId = @ExtUserId"
 
     $queryAccountCreate = "INSERT INTO [$sqlDatabaseHelloId].[dbo].[$sqlDatabaseHelloIdAccountTable] (
