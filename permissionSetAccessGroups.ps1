@@ -1,4 +1,3 @@
-$dryRun =$false
 $aRef = $accountReference | ConvertFrom-Json
 $o = $operation | ConvertFrom-Json
 $pRef = $permissionReference | ConvertFrom-Json
@@ -6,9 +5,7 @@ $config = $configuration | ConvertFrom-Json
 
 $sqlInstance = $config.connection.server
 $sqlDatabaseHelloId = $config.connection.database.salto_interfaces
-$sqlTableMembership = $config.connection.table.helloid_membership
 $sqlConnectionString = "Server=$sqlInstance;Database=$sqlDatabaseHelloId;Trusted_Connection=True;Integrated Security=true;"
-
 
 $success = $false
 $auditLogs = New-Object Collections.Generic.List[PSCustomObject]
@@ -19,8 +16,6 @@ $sqlDatabaseHelloIdAccountTable = $config.connection.table.salto_staging
 $queryAccountToBeProcessedBySalto = "UPDATE [$sqlDatabaseHelloId].[dbo].[$sqlDatabaseHelloIdAccountTable]  SET [ToBeProcessedBySalto] = 1 WHERE ExtUserId = @accountReference;"
 
 # Set id to the hash of the other three values to make sure a permission can only be set once
-
-
 $queryCheckPermission = "SELECT [ExtZoneIDList] FROM $sqlDatabaseHelloIdAccountTable WHERE $($config.correlationAccountFieldSaltoStaging)=$aRef and  [ExtZoneIDList] like '%$($pRef.reference)%'" 
 $queryGrantPermission = "UPDATE $sqlDatabaseHelloIdAccountTable SET [ToBeProcessedBySalto] = 1, [ExtZoneIDList] = '{'+TRIM(',' FROM Concat_ws(',',substring([ExtZoneIDList],2,LEN([ExtZoneIDList])-2),'$($pRef.reference)'))+'}' WHERE $($config.correlationAccountFieldSaltoStaging)=$aRef " 
 $queryRevokePermission = "UPDATE $sqlDatabaseHelloIdAccountTable SET [ToBeProcessedBySalto] = 1, [ExtZoneIDList] = '{'+TRIM(',' FROM replace(','+substring([ExtZoneIDList],2,LEN([ExtZoneIDList])-2)+',','$($pRef.reference),',''))+'}' WHERE $($config.correlationAccountFieldSaltoStaging)=$aRef " 
@@ -41,7 +36,6 @@ try {
         $sqlCmd = New-Object System.Data.SqlClient.SqlCommand
         $sqlCmd.Connection = $sqlConnection
 
-        
         # Check if record already exists
         $sqlCmd.CommandText = $queryCheckPermission
         $queryMembership = $SqlCmd.ExecuteReader()
@@ -49,16 +43,15 @@ try {
         $queryMembership.Close()
 
         if (($o -eq "Grant" -and -not($exists)) -or ($o -eq "Revoke" -and $exists)) { #Only add when record doesn't exist and only delete when record exists
-        
             $sqlCmd.CommandText = Get-Variable -Name "query$($o)Permission" -ValueOnly
-            
+
             if (-not($dryRun -eq $true)) {
                 $null = $SqlCmd.ExecuteNonQuery()
-            
+
                 # Run account query
                 $sqlCmd = New-Object System.Data.SqlClient.SqlCommand
                 $sqlCmd.Connection = $sqlConnection
-                
+
                 $sqlCmd.CommandText = $queryAccountToBeProcessedBySalto
 
             } else {

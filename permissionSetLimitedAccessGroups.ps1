@@ -9,7 +9,6 @@ $config = $configuration | ConvertFrom-Json
 
 $sqlInstance = $config.connection.server
 $sqlDatabaseHelloId = $config.connection.database.salto_interfaces
-$sqlTableMembership = $config.connection.table.helloid_membership
 $sqlConnectionString = "Server=$sqlInstance;Database=$sqlDatabaseHelloId;Trusted_Connection=True;Integrated Security=true;"
 
 $success = $false
