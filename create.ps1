@@ -1,4 +1,4 @@
-$dryrun=$false
+
 #Initialize default properties
 $p = $person | ConvertFrom-Json
 $success = $false
