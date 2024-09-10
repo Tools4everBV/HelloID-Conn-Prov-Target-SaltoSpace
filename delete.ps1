@@ -8,7 +8,7 @@ $auditMessage = "Account for person " + $p.DisplayName + " not deleted succesful
 $config = $configuration | ConvertFrom-Json
 $sqlInstance = $config.connection.server
 $sqlDatabaseHelloId = $config.connection.database.salto_interfaces
-$sqlDatabaseHelloIdAccountTable = $config.connection.table.helloid_user
+$sqlDatabaseHelloIdAccountTable = $config.connection.table.salto_staging
 $sqlConnectionString = "Server=$sqlInstance;Database=$sqlDatabaseHelloId;Trusted_Connection=True;Integrated Security=true;"
 
 $queryAccountLookupHelloId = "SELECT ExtUserId FROM [$sqlDatabaseHelloId].[dbo].[$sqlDatabaseHelloIdAccountTable] WHERE ExtUserId = @ExtUserId;"
