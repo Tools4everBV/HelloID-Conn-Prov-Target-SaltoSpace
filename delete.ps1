@@ -1,92 +1,107 @@
-#Initialize default properties
-$p = $person | ConvertFrom-Json
-$aRef = $accountReference | ConvertFrom-Json
-$success = $false
-$auditMessage = "Account for person " + $p.DisplayName + " not deleted succesfully"
+##################################################
+# HelloID-Conn-Prov-Target-{connectorName}-Delete
+# PowerShell V2
+##################################################
 
-#Initialize SQL properties
-$config = $configuration | ConvertFrom-Json
-$sqlInstance = $config.connection.server
-$sqlDatabaseHelloId = $config.connection.database.salto_interfaces
-$sqlDatabaseHelloIdAccountTable = $config.connection.table.helloid_user
-$sqlConnectionString = "Server=$sqlInstance;Database=$sqlDatabaseHelloId;Trusted_Connection=True;Integrated Security=true;"
+# Enable TLS1.2
+[System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor [System.Net.SecurityProtocolType]::Tls12
 
-$queryAccountLookupHelloId = "SELECT ExtUserId FROM [$sqlDatabaseHelloId].[dbo].[$sqlDatabaseHelloIdAccountTable] WHERE ExtUserId = @ExtUserId;"
-$queryAccountSoftDelete = "UPDATE [$sqlDatabaseHelloId].[dbo].[$sqlDatabaseHelloIdAccountTable]  SET [Action] = @Action, [ToBeProcessedBySalto] = 1 WHERE ExtUserId = @ExtUserId;"
-
-$account = @{
-            ExtUserId = $aRef
-            Action = 4
+#region functions
+function Resolve-{connectorName}Error {
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory)]
+        [object]
+        $ErrorObject
+    )
+    process {
+        $httpErrorObj = [PSCustomObject]@{
+            ScriptLineNumber = $ErrorObject.InvocationInfo.ScriptLineNumber
+            Line             = $ErrorObject.InvocationInfo.Line
+            ErrorDetails     = $ErrorObject.Exception.Message
+            FriendlyMessage  = $ErrorObject.Exception.Message
         }
-Try {
-    # Connect to the SQL server
-    $sqlConnection = New-Object System.Data.SqlClient.SqlConnection
-    $sqlConnection.ConnectionString = $sqlConnectionString
-    $sqlConnection.Open()
-
-    # Next check if user exists in the HelloID staging table
-    $sqlCmd = New-Object System.Data.SqlClient.SqlCommand
-    $sqlCmd.Connection = $sqlConnection
-    $sqlCmd.CommandText = $queryAccountLookupHelloId
-    $account.Keys | Foreach-Object { $null = $sqlCmd.Parameters.Add("@" + $_, "$($account.Item($_))") }
-    $accountExists = $SqlCmd.ExecuteReader()
-
-    $lookupResult = @()
-    while ($accountExists.Read()) {
-        for ($i = 0; $i -lt $accountExists.FieldCount; $i++) {
-            $lookupResult += $accountExists.GetValue($i)
+        if (-not [string]::IsNullOrEmpty($ErrorObject.ErrorDetails.Message)) {
+            $httpErrorObj.ErrorDetails = $ErrorObject.ErrorDetails.Message
+        } elseif ($ErrorObject.Exception.GetType().FullName -eq 'System.Net.WebException') {
+            if ($null -ne $ErrorObject.Exception.Response) {
+                $streamReaderResponse = [System.IO.StreamReader]::new($ErrorObject.Exception.Response.GetResponseStream()).ReadToEnd()
+                if (-not [string]::IsNullOrEmpty($streamReaderResponse)) {
+                    $httpErrorObj.ErrorDetails = $streamReaderResponse
+                }
+            }
         }
+        try {
+            $errorDetailsObject = ($httpErrorObj.ErrorDetails | ConvertFrom-Json)
+            # Make sure to inspect the error result object and add only the error message as a FriendlyMessage.
+            # $httpErrorObj.FriendlyMessage = $errorDetailsObject.message
+            $httpErrorObj.FriendlyMessage = $httpErrorObj.ErrorDetails # Temporarily assignment
+        } catch {
+            $httpErrorObj.FriendlyMessage = $httpErrorObj.ErrorDetails
+        }
+        Write-Output $httpErrorObj
     }
-    $accountExists.Close()
+}
+#endregion
 
-    # Check if user exists in the HelloID database
-    Switch ($lookupResult.count) {
-         0 {
-            #$queryAccount = $queryAccountCreate
-            Write-Verbose -Verbose -Message "Account record for '$($p.displayName)' with ExtUserId '$($account.ExtUserId)' does not exist in the HelloID database."
-            #Mark success here!
-        } 1 {
-            #$queryAccount = $queryAccountUpdate
-            Write-Verbose -Verbose -Message "Account record exists in the HelloID database. Soft deleting account record for person '$($p.displayName)' and ExtUserId '$($account.ExtUserId)'"
-        } default {
-            # TODO:"Implement audit stuff here
-            throw "Multiple ($($lookupResult.count)) account records found in the HelloID database for ExtUserId '$accountReference' : " + ($lookupResult | convertTo-Json)
-        }
+try {
+    # Verify if [aRef] has a value
+    if ([string]::IsNullOrEmpty($($actionContext.References.Account))) {
+        throw 'The account reference could not be found'
     }
 
-     #Do not execute when running preview
-     if (-Not($dryRun -eq $True)) {
+    Write-Information 'Verifying if a {connectorName} account exists'
+    $correlatedAccount = 'userInfo'
 
-        # Run account query
-        $sqlCmd = New-Object System.Data.SqlClient.SqlCommand
-        $sqlCmd.Connection = $sqlConnection
-        $sqlCmd.CommandText = $queryAccountSoftDelete
-        $account.Keys | Foreach-Object { $null = $sqlCmd.Parameters.Add("@" + $_, "$($account.Item($_))") }
-        $null = $SqlCmd.ExecuteNonQuery()
-        $success = $true
-        $auditMessage = "Soft deleted account record for person '$($p.displayName)' and ExtUserId '$($account.ExtUserId)' succesfully"
-        Write-Verbose -Verbose  -Message "Soft deleted account record for person '$($p.displayName)' and ExtUserId '$($account.ExtUserId)' succesfully"
-     }
+    if ($null -ne $correlatedAccount) {
+        $action = 'DeleteAccount'
+    } else {
+        $action = 'NotFound'
+    }
+
+    # Process
+    switch ($action) {
+        'DeleteAccount' {
+            if (-not($actionContext.DryRun -eq $true)) {
+                Write-Information "Deleting {connectorName} account with accountReference: [$($actionContext.References.Account)]"
+                # < Write Delete logic here >
+
+            } else {
+                Write-Information "[DryRun] Delete {connectorName} account with accountReference: [$($actionContext.References.Account)], will be executed during enforcement"
+            }
+
+            $outputContext.Success = $true
+            $outputContext.AuditLogs.Add([PSCustomObject]@{
+                    Message = 'Delete account was successful'
+                    IsError = $false
+                })
+            break
+        }
+
+        'NotFound' {
+            Write-Information "{connectorName} account: [$($actionContext.References.Account)] could not be found, possibly indicating that it could be deleted"
+            $outputContext.Success = $true
+            $outputContext.AuditLogs.Add([PSCustomObject]@{
+                    Message = "{connectorName} account: [$($actionContext.References.Account)] could not be found, possibly indicating that it could be deleted"
+                    IsError = $false
+                })
+            break
+        }
+    }
 } catch {
-     $auditMessage = " not deleted succesfully: General error"
-     if (![string]::IsNullOrEmpty($_.ErrorDetails.Message)) {
-         Write-Verbose -Verbose -Message "Something went wrong $($_.ScriptStackTrace). Error message: '$($_.ErrorDetails.Message)'"
-         $auditMessage = " not deleted succesfully: '$($_.ErrorDetails.Message)'"
-     } else {
-         Write-Verbose -Verbose -Message "Something went wrong $($_.ScriptStackTrace). Error message: '$($_)'"
-         $auditMessage = " not deleted succesfully: '$($_)'"
-     }
+    $outputContext.success = $false
+    $ex = $PSItem
+    if ($($ex.Exception.GetType().FullName -eq 'Microsoft.PowerShell.Commands.HttpResponseException') -or
+        $($ex.Exception.GetType().FullName -eq 'System.Net.WebException')) {
+        $errorObj = Resolve-{connectorName}Error -ErrorObject $ex
+        $auditMessage = "Could not delete {connectorName} account. Error: $($errorObj.FriendlyMessage)"
+        Write-Warning "Error at Line '$($errorObj.ScriptLineNumber)': $($errorObj.Line). Error: $($errorObj.ErrorDetails)"
+    } else {
+        $auditMessage = "Could not delete {connectorName} account. Error: $($_.Exception.Message)"
+        Write-Warning "Error at Line '$($ex.InvocationInfo.ScriptLineNumber)': $($ex.InvocationInfo.Line). Error: $($ex.Exception.Message)"
+    }
+    $outputContext.AuditLogs.Add([PSCustomObject]@{
+            Message = $auditMessage
+            IsError = $true
+        })
 }
-
-#build up result
-$result = [PSCustomObject]@{
-    Success          = $success
-    AccountReference = $accountReference
-    AuditDetails     = $auditMessage
-    Account          = $account
-
-    # Optionally return data for use in other systems
-    ExportData = [PSCustomObject]@{}
-}
-
-Write-Output $result | ConvertTo-Json -Depth 10

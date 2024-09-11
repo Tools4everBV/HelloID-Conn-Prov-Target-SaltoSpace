@@ -1,234 +1,136 @@
-#Initialize default properties
-$p = $person | ConvertFrom-Json
-$success = $false
-$auditMessage = "Account for person " + $p.DisplayName + " not created succesfully"
+#################################################
+# HelloID-Conn-Prov-Target-SaltoSpace-Create
+# PowerShell V2
+#################################################
 
-#Initialize SQL properties
-$config = $configuration | ConvertFrom-Json
-$sqlInstance = $config.connection.server
-$sqlDatabaseHelloId = $config.connection.database.salto_interfaces
-$sqlDatabaseSaltoSpace = $config.connection.database.salto_space
-$sqlDatabaseHelloIdAccountTable = $config.connection.table.helloid_user
-$sqlConnectionString = "Server=$sqlInstance;Database=$sqlDatabaseHelloId;Trusted_Connection=True;Integrated Security=true;"
-$correlationAccountFieldSaltoSpace = $config.correlationAccountFieldSaltoSpace
-$correlationAccountFieldSaltoStaging = $config.correlationAccountFieldSaltoStaging
+# Enable TLS1.2
+[System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor [System.Net.SecurityProtocolType]::Tls12
 
-#Naming convention
-if(-Not([string]::IsNullOrEmpty($p.Name.FamilyNamePrefix))) { $prefix = $p.Name.FamilyNamePrefix + " " }
-if(-Not([string]::IsNullOrEmpty($p.Name.FamilyNamePartnerPrefix))) { $partnerprefix = $p.Name.FamilyNamePartnerPrefix + " " }
-Switch ($p.Name.Convention) {
-    "B" {$surname += $prefix + $p.Name.FamilyName}
-    "P" {$surname += $partnerprefix + $p.Name.FamilyNamePartner}
-    "BP" {$surname += $prefix + $p.Name.FamilyName + " - " + $partnerprefix + $p.Name.FamilyNamePartner}
-    "PB" {$surname += $partnerprefix + $p.Name.FamilyNamePartner + " - " + $prefix + $p.Name.FamilyName}
-    default {$surname += $prefix + $p.Name.FamilyName}
+#region functions
+function Resolve-{connectorName}Error {
+    [CmdletBinding()]
+    param (
+        [Parameter(Mandatory)]
+        [object]
+        $ErrorObject
+    )
+    process {
+        $httpErrorObj = [PSCustomObject]@{
+            ScriptLineNumber = $ErrorObject.InvocationInfo.ScriptLineNumber
+            Line             = $ErrorObject.InvocationInfo.Line
+            ErrorDetails     = $ErrorObject.Exception.Message
+            FriendlyMessage  = $ErrorObject.Exception.Message
+        }
+        if (-not [string]::IsNullOrEmpty($ErrorObject.ErrorDetails.Message)) {
+            $httpErrorObj.ErrorDetails = $ErrorObject.ErrorDetails.Message
+        } elseif ($ErrorObject.Exception.GetType().FullName -eq 'System.Net.WebException') {
+            if ($null -ne $ErrorObject.Exception.Response) {
+                $streamReaderResponse = [System.IO.StreamReader]::new($ErrorObject.Exception.Response.GetResponseStream()).ReadToEnd()
+                if (-not [string]::IsNullOrEmpty($streamReaderResponse)) {
+                    $httpErrorObj.ErrorDetails = $streamReaderResponse
+                }
+            }
+        }
+        try {
+            $errorDetailsObject = ($httpErrorObj.ErrorDetails | ConvertFrom-Json)
+            # Make sure to inspect the error result object and add only the error message as a FriendlyMessage.
+            # $httpErrorObj.FriendlyMessage = $errorDetailsObject.message
+            $httpErrorObj.FriendlyMessage = $httpErrorObj.ErrorDetails # Temporarily assignment
+        } catch {
+            $httpErrorObj.FriendlyMessage = $httpErrorObj.ErrorDetails
+        }
+        Write-Output $httpErrorObj
+    }
 }
-
-#Most fields can only be 32 chars long...
-if ($p.PrimaryContract.Department.DisplayName.length -gt 31)  {$p.PrimaryContract.Department = $p.PrimaryContract.Department.DisplayName.subString(0,31)}
-if ($p.PrimaryContract.CostCenter.Name.length -gt 31)  {$p.PrimaryContract.CostCenter.Name = $p.PrimaryContract.CostCenter.Name.subString(0,31)}
-if ($p.PrimaryContract.Title.Name.length -gt 31)  {$p.PrimaryContract.Title.Name = $p.PrimaryContract.Title.Name.subString(0,31)}
-
-# Enddate
-if ([string]::IsNullOrEmpty($p.PrimaryContract.EndDate)) {
-    $p.PrimaryContract | Add-Member -NotePropertyName EndDate -NotePropertyValue '2099-12-01T00:00:00Z' -Force
-}
+#endregion
 
 try {
-    $account = @{
-        Action                                  = 3
-        ExtUserID                               = $p.ExternalId
-        FirstName                               = $p.Name.NickName
-        Lastname                                = $surname # Todo: Custom veld toevoegen voor samengestelde naam!
-        #Title                                  = $null
-        #Office                                 = $null
-        AuditOpenings                           = 1
-        #ExtendedOpeningTimeEnabled             = $null
-        AntipassbackEnabled                     = 1
-        #CalendarID                             = $null
-        GPF1                                    = $p.PrimaryContract.Department.DisplayName
-        GPF2                                    = $p.ExternalId
-        #GPF3                                    = $p.PrimaryContract.CostCenter.Name
-        GPF3                                    = $p.Contact.Business.Address.Locality
-        GPF4                                    = $p.PrimaryContract.Title.Name
-        #GPF5                                   = $null
-        #AutoKeyEdit_ROMCode                    = $null
-        UserActivation                          = $p.PrimaryContract.StartDate
-        UserExpiration_ExpDate                  = $p.PrimaryContract.EndDate
-        #STKE_Period                            = $null
-        #STKE_UnitOfPeriod                      = $null
+    # Initial Assignments
+    $outputContext.AccountReference = 'Currently not available'
+
+    # Validate correlation configuration
+    if ($actionContext.CorrelationConfiguration.Enabled) {
+        $correlationField = $actionContext.CorrelationConfiguration.accountField
+        $correlationValue = $actionContext.CorrelationConfiguration.accountFieldValue
+
+        if ([string]::IsNullOrEmpty($($correlationField))) {
+            throw 'Correlation is enabled but not configured correctly'
+        }
+        if ([string]::IsNullOrEmpty($($correlationValue))) {
+            throw 'Correlation is enabled but [accountFieldValue] is empty. Please make sure it is correctly mapped'
+        }
+
+        # Determine if a user needs to be [created] or [correlated]
+        $correlatedAccount = @{
+            Id          = (New-Guid).Guid
+            DisplayName = $actionContext.Data.DisplayName
+        }
+        # Example of replacing the placeholder with actual code:
+        # Retrieve user details using an API call and store the result in $correlatedAccount
+        # $correlatedAccount = Invoke-RestMethod @splatGetUserParams
     }
 
-    $queryAccountLookupSaltoSpace = "SELECT ExtID FROM [$sqlDatabaseSaltoSpace].[dbo].[tb_Users] INNER JOIN [$sqlDatabaseSaltoSpace].[dbo].[tb_Users_Ext] ON tb_Users.id_user = tb_Users_Ext.id_user WHERE $correlationAccountFieldSaltoSpace = @$correlationAccountFieldSaltoStaging"
-    $queryAccountLookupHelloId  = "SELECT ExtUserId FROM [$sqlDatabaseHelloId].[dbo].[$sqlDatabaseHelloIdAccountTable] WHERE ExtUserId = @ExtUserId"
-
-    $queryAccountCreate = "INSERT INTO [$sqlDatabaseHelloId].[dbo].[$sqlDatabaseHelloIdAccountTable] (
-                             [Action]
-                            ,[ExtUserID]
-                            ,[FirstName]
-                            ,[Lastname]
-                        --  ,[Title]
-                        --  ,[Office]
-                            ,[AuditOpenings]
-                        --  ,[ExtendedOpeningTimeEnabled]
-                            ,[AntipassbackEnabled]
-                        --  ,[CalendarID]
-                            ,[GPF1]
-                            ,[GPF2]
-                            ,[GPF3]
-                            ,[GPF4]
-                        --  ,[GPF5]
-                        --  ,[AutoKeyEdit.ROMCode]
-                            ,[UserActivation]
-                            ,[UserExpiration.ExpDate]
-                        --  ,[STKE.Period]
-                        --  ,[STKE.UnitOfPeriod]
-                            ,ToBeProcessedBySalto
-                        ) VALUES (
-                             @Action
-                            ,@ExtUserID
-                            ,@FirstName
-                            ,@Lastname
-                        --  ,@Title
-                        --  ,@Office
-                            ,@AuditOpenings
-                        --  ,@ExtendedOpeningTimeEnabled
-                            ,@AntipassbackEnabled
-                        --  ,@CalendarID
-                            ,@GPF1
-                            ,@GPF2
-                            ,@GPF3
-                            ,@GPF4
-                        --  ,@GPF5
-                        --  ,@AutoKeyEdit_ROMCode
-                            ,@UserActivation
-                            ,@UserExpiration_ExpDate
-                        --  ,@STKE_Period
-                        --  ,@STKE_UnitOfPeriod
-                            ,1
-                        );"
-
-    $queryAccountUpdate = "UPDATE [$sqlDatabaseHelloId].[dbo].[$sqlDatabaseHelloIdAccountTable]
-                            SET
-                                 [Action] = @Action
-                                ,[ExtUserID] = @ExtUserID
-                                ,[FirstName] = @FirstName
-                            --  ,[Title] = @Title
-                            --  ,[Office] = @Office
-                            --   ,[ExtendedOpeningTimeEnabled] = @ExtendedOpeningTimeEnabled
-                                ,[AntipassbackEnabled] = @AntipassbackEnabled
-                            --  ,[CalendarID] = @CalendarID
-                                ,[GPF1] = @GPF1
-                                ,[GPF2] = @GPF2
-                                ,[GPF3] = @GPF3
-                                ,[GPF4] = @GPF4
-                            --  ,[GPF5] = @GPF5
-                            --  ,[AutoKeyEdit.ROMCode] = @AutoKeyEdit_ROMCode
-                                ,[UserActivation] = @UserActivation
-                                ,[UserExpiration.ExpDate] = @UserExpiration_ExpDate
-                            --  ,[STKE.Period] = @STKE_Period
-                            --  ,[STKE.UnitOfPeriod] = @STKE_UnitOfPeriod
-                                ,ToBeProcessedBySalto = 1
-                            WHERE ExtUserId = @ExtUserId;"
-
-    # Connect to the SQL server
-    $sqlConnection = New-Object System.Data.SqlClient.SqlConnection
-    $sqlConnection.ConnectionString = $sqlConnectionString
-    $sqlConnection.Open()
-
-    #Lookup record in Salto Space database (correlation)
-    $sqlCmd = New-Object System.Data.SqlClient.SqlCommand
-    $sqlCmd.Connection = $sqlConnection
-    $sqlCmd.CommandText = $queryAccountLookupSaltoSpace
-    $account.Keys | Foreach-Object { $null = $sqlCmd.Parameters.Add("@" + $_, "$($account.Item($_))") }
-    $accountExists = $SqlCmd.ExecuteReader()
-    $lookupResult = @()
-    while ($accountExists.Read()) {
-        for ($i = 0; $i -lt $accountExists.FieldCount; $i++) {
-            $lookupResult += $accountExists.GetValue($i)
-        }
-    }
-    $accountExists.Close()
-
-    # Check if user already exists in the Salto Database
-    write-verbose -Verbose -Message "$lookupResult"
-    Switch ($lookupResult.count) {
-        0 {
-            Write-Verbose -Verbose -Message "Account record does not exist. Creating account record for person '$($p.displayName)' with ExtUserId '$($account.ExtUserId)'"
-        }
-        1 {
-            $account.ExtUserID = $lookupResult[0]
-            Write-Verbose -Verbose -Message "Account record exists in the Salto Space database. Correlating account record for person '$($p.displayName)' with ExtUserId '$($account.ExtUserId)'"
-        }
-        default {
-            # TODO:"Implement audit stuff here
-            throw "Multiple ($($lookupResult.count)) account records found for employeeId '$($p.externalId)' : " + ($lookupResult | convertTo-Json)
-        }
-    }
-
-    # Next check if user exists in the HelloID staging table
-    $sqlCmd = New-Object System.Data.SqlClient.SqlCommand
-    $sqlCmd.Connection = $sqlConnection
-    $sqlCmd.CommandText = $queryAccountLookupHelloId
-    #write-verbose -verbose -Message $sqlCmd.CommandText
-    $account.Keys | Foreach-Object { $null = $sqlCmd.Parameters.Add("@" + $_, "$($account.Item($_))") }
-    $accountExists = $SqlCmd.ExecuteReader()
-    $lookupResult = @()
-    while ($accountExists.Read()) {
-        for ($i = 0; $i -lt $accountExists.FieldCount; $i++) {
-            $lookupResult += $accountExists.GetValue($i)
-        }
-    }
-    $accountExists.Close()
-
-    # Check if user already exists in the HelloID database
-    Switch ($lookupResult.count) {
-         0 {
-            $queryAccount = $queryAccountCreate
-            Write-Verbose -Verbose -Message "Account record does not exist in the HelloID database. Creating account record for person '$($p.displayName)' and ExtUserId '$($account.ExtUserId)'"
-        } 1 {
-            $queryAccount = $queryAccountUpdate
-            Write-Verbose -Verbose -Message "Account record exists in the HelloID database. Updating account record for person '$($p.displayName)' and ExtUserId '$($account.ExtUserId)'"
-        } default {
-            # TODO:"Implement audit stuff here
-            throw "Multiple ($($lookupResult.count)) account records found in the HelloID database for ExtUserId '$accountReference' : " + ($lookupResult | convertTo-Json)
-        }
-    }
-
-    #Do not execute when running preview
-    if (-Not($dryRun -eq $True)) {
-
-        # Run account query
-        $sqlCmd = New-Object System.Data.SqlClient.SqlCommand
-        $sqlCmd.Connection = $sqlConnection
-        $sqlCmd.CommandText = $queryAccount
-        $account.Keys | Foreach-Object { $null = $sqlCmd.Parameters.Add("@" + $_, "$($account.Item($_))") }
-        $null = $SqlCmd.ExecuteNonQuery()
-        $success = $true
-        $auditMessage = "Created account record for person '$($p.displayName)' and ExtUserId '$($account.ExtUserId)' succesfully"
-        Write-Verbose -Verbose -Message "Created account record for person '$($p.displayName)' and ExtUserId '$($account.ExtUserId)' succesfully"
-    }
-} catch {
-    if (![string]::IsNullOrEmpty($_.ErrorDetails.Message)) {
-        Write-Verbose -Verbose -Message "Something went wrong $($_.ScriptStackTrace). Error message: '$($_.ErrorDetails.Message)'"
-        $auditMessage = "Account record not created succesfully: '$($_.ErrorDetails.Message)'"
+    if ($null -ne $correlatedAccount) {
+        $action = 'CorrelateAccount'
     } else {
-        Write-Verbose -Verbose -Message "Something went wrong $($_.ScriptStackTrace). Error message: '$($_)'"
-        $auditMessage = "Account record not created succesfully: '$($_)'"
+        $action = 'CreateAccount'
     }
-} finally {
-    $sqlConnection.Close()
+
+    # Process
+    switch ($action) {
+        'CreateAccount' {
+            $splatCreateParams = @{
+                Uri    = $actionContext.Configuration.BaseUrl
+                Method = 'POST'
+                Body   = $actionContext.Data | ConvertTo-Json
+            }
+
+            # Make sure to test with special characters and if needed; add utf8 encoding.
+            if (-not($actionContext.DryRun -eq $true)) {
+                Write-Information 'Creating and correlating {connectorName} account'
+                # < Write Create logic here >
+
+                $createdAccount = Invoke-RestMethod @splatCreateParams
+                $outputContext.Data = $createdAccount
+                $outputContext.AccountReference = $createdAccount.Id
+            } else {
+                Write-Information '[DryRun] Create and correlate {connectorName} account, will be executed during enforcement'
+            }
+            $auditLogMessage = "Create account was successful. AccountReference is: [$($outputContext.AccountReference)]"
+            break
+        }
+
+        'CorrelateAccount' {
+            Write-Information 'Correlating {connectorName} account'
+
+            $outputContext.Data = $correlatedAccount
+            $outputContext.AccountReference = $correlatedAccount.Id
+            $outputContext.AccountCorrelated = $true
+            $auditLogMessage = "Correlated account: [$($outputContext.AccountReference)] on field: [$($correlationField)] with value: [$($correlationValue)]"
+            break
+        }
+    }
+
+    $outputContext.success = $true
+    $outputContext.AuditLogs.Add([PSCustomObject]@{
+            Action  = $action
+            Message = $auditLogMessage
+            IsError = $false
+        })
+} catch {
+    $outputContext.success = $false
+    $ex = $PSItem
+    if ($($ex.Exception.GetType().FullName -eq 'Microsoft.PowerShell.Commands.HttpResponseException') -or
+        $($ex.Exception.GetType().FullName -eq 'System.Net.WebException')) {
+        $errorObj = Resolve-{connectorName}Error -ErrorObject $ex
+        $auditMessage = "Could not create or correlate {connectorName} account. Error: $($errorObj.FriendlyMessage)"
+        Write-Warning "Error at Line '$($errorObj.ScriptLineNumber)': $($errorObj.Line). Error: $($errorObj.ErrorDetails)"
+    } else {
+        $auditMessage = "Could not create or correlate {connectorName} account. Error: $($ex.Exception.Message)"
+        Write-Warning "Error at Line '$($ex.InvocationInfo.ScriptLineNumber)': $($ex.InvocationInfo.Line). Error: $($ex.Exception.Message)"
+    }
+    $outputContext.AuditLogs.Add([PSCustomObject]@{
+            Message = $auditMessage
+            IsError = $true
+        })
 }
-
-#build up result
-$result = [PSCustomObject]@{
-    Success          = $success
-    AccountReference = $account.ExtUserID
-    AuditDetails     = $auditMessage
-    Account          = $account
-
-    # Optionally return data for use in other systems
-    ExportData = [PSCustomObject]@{}
-}
-
-Write-Output $result | ConvertTo-Json -Depth 10

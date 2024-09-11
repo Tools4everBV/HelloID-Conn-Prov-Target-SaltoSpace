@@ -1,0 +1,277 @@
+{
+    "Version": "v1",
+    "MappingFields": [
+      {
+        "Name": "AntipassbackEnabled",
+        "Description": "Enable antipassback within the user’s key.\n0 = (OFF), 1 = (ON)\n",
+        "Type": "Text",
+        "MappingActions": [
+          {
+            "MapForActions": [
+              "Create"
+            ],
+            "MappingMode": "Fixed",
+            "Value": "\"1\"",
+            "UsedInNotifications": false,
+            "StoreInAccountData": false
+          }
+        ]
+      },
+      {
+        "Name": "GPF1",
+        "Description": "General purpose field #1.\nNull = Any value allowed",
+        "Type": "Text",
+        "MappingActions": [
+          {
+            "MapForActions": [
+              "Create"
+            ],
+            "MappingMode": "Fixed",
+            "Value": "\"\"",
+            "UsedInNotifications": false,
+            "StoreInAccountData": false
+          }
+        ]
+      },
+      {
+        "Name": "GPF4",
+        "Description": "General purpose field #4.\nNull = Any value allowed",
+        "Type": "Text",
+        "MappingActions": [
+          {
+            "MapForActions": [
+              "Create"
+            ],
+            "MappingMode": "Fixed",
+            "Value": "\"\"",
+            "UsedInNotifications": false,
+            "StoreInAccountData": false
+          }
+        ]
+      },
+      {
+        "Name": "UserExpiration.ExpDate",
+        "Description": "Long term expiration date of the user data and access permission.\nExample = JJJJ-MM-DDTHH:MM:SS (2017-09-30T23:59)\"",
+        "Type": "Text",
+        "MappingActions": [
+          {
+            "MapForActions": [
+              "Create",
+              "Update"
+            ],
+            "MappingMode": "Field",
+            "Value": "\"Person.PrimaryContract.EndDate\"",
+            "UsedInNotifications": false,
+            "StoreInAccountData": true
+          }
+        ]
+      },
+      {
+        "Name": "UserActivation",
+        "Description": "Starting date of the key. \nExample = JJJJ-MM-DD (2017-09-30)",
+        "Type": "Text",
+        "MappingActions": [
+          {
+            "MapForActions": [
+              "Create"
+            ],
+            "MappingMode": "Field",
+            "Value": "\"Person.PrimaryContract.StartDate\"",
+            "UsedInNotifications": false,
+            "StoreInAccountData": true
+          }
+        ]
+      },
+      {
+        "Name": "Action",
+        "Description": "1   = Create new record. \n2   = Update existing record.\n3   = Update record if exists, create new one.\n4   = Delete existing record.\n8   = Cancel key\n9   = Ban User\n10 = UnBan User\n11 = JustIN_Mobile, Update users or create a new one.  Assign key when no key is assigned.\"\nIf Action is not used, Then software always use action = 3",
+        "Type": "Text",
+        "MappingActions": [
+          {
+            "MapForActions": [
+              "Create",
+              "Update"
+            ],
+            "MappingMode": "Fixed",
+            "Value": "\"3\"",
+            "UsedInNotifications": false,
+            "StoreInAccountData": false
+          },
+          {
+            "MapForActions": [
+              "Delete"
+            ],
+            "MappingMode": "Fixed",
+            "Value": "\"4\"",
+            "UsedInNotifications": false,
+            "StoreInAccountData": false
+          }
+        ]
+      },
+      {
+        "Name": "Office",
+        "Description": "Put a door in office mode (permanently opened).\n0 = (OFF), 1 = (ON)",
+        "Type": "Text",
+        "MappingActions": [
+          {
+            "MapForActions": [
+              "Create",
+              "Update"
+            ],
+            "MappingMode": "Fixed",
+            "Value": "\"0\"",
+            "UsedInNotifications": false,
+            "StoreInAccountData": false
+          }
+        ]
+      },
+      {
+        "Name": "Title",
+        "Description": "Title of the staff user. \nNull = Any value allowed",
+        "Type": "Text",
+        "MappingActions": [
+          {
+            "MapForActions": [
+              "Create",
+              "Update"
+            ],
+            "MappingMode": "Field",
+            "Value": "\"Person.Details.HonorificPrefix\"",
+            "UsedInNotifications": false,
+            "StoreInAccountData": false
+          }
+        ]
+      },
+      {
+        "Name": "AuditOpenings",
+        "Description": "All the openings are registered within the user’s key.\nSALTO STRONGLY RECOMMENDS = 1\n0 = (OFF), 1 = (ON)",
+        "Type": "Text",
+        "MappingActions": [
+          {
+            "MapForActions": [
+              "Create"
+            ],
+            "MappingMode": "Fixed",
+            "Value": "\"1\"",
+            "UsedInNotifications": false,
+            "StoreInAccountData": false
+          }
+        ]
+      },
+      {
+        "Name": "GPF2",
+        "Description": "General purpose field #2.\nNull = Any value allowed",
+        "Type": "Text",
+        "MappingActions": [
+          {
+            "MapForActions": [
+              "Create"
+            ],
+            "MappingMode": "Fixed",
+            "Value": "\"\"",
+            "UsedInNotifications": false,
+            "StoreInAccountData": false
+          }
+        ]
+      },
+      {
+        "Name": "GPF3",
+        "Description": "General purpose field #3.\nNull = Any value allowed",
+        "Type": "Text",
+        "MappingActions": [
+          {
+            "MapForActions": [
+              "Create"
+            ],
+            "MappingMode": "Fixed",
+            "Value": "\"\"",
+            "UsedInNotifications": false,
+            "StoreInAccountData": false
+          }
+        ]
+      },
+      {
+        "Name": "ExtUserID",
+        "Description": "Internal Salto ID. Long ID for existing accounts, employeeId for accounts generated by HelloID.",
+        "Type": "Text",
+        "MappingActions": [
+          {
+            "MapForActions": [
+              "Create"
+            ],
+            "MappingMode": "None",
+            "Value": "\"\"",
+            "UsedInNotifications": false,
+            "StoreInAccountData": true
+          }
+        ]
+      },
+      {
+        "Name": "FirstName",
+        "Description": "First name of the staff user.  \nNull = Any value allowed",
+        "Type": "Text",
+        "MappingActions": [
+          {
+            "MapForActions": [
+              "Create",
+              "Update"
+            ],
+            "MappingMode": "Field",
+            "Value": "\"Person.Name.NickName\"",
+            "UsedInNotifications": false,
+            "StoreInAccountData": true
+          }
+        ]
+      },
+      {
+        "Name": "LastName",
+        "Description": "Last name of the staff user.\nNull = Any value allowed",
+        "Type": "Text",
+        "MappingActions": [
+          {
+            "MapForActions": [
+              "Create",
+              "Update"
+            ],
+            "MappingMode": "Complex",
+            "Value": "\"// generateSurnameOption1.js [https://github.com/Tools4everBV/HelloID-Lib-Prov-HelperFunctions/blob/master/Javascript/Target/Surname_Lastname/Scripts/generateSurnameOption1.js]\\r\\n//\\r\\n// Mapping logic to generate the Surname according to the following convention.\\r\\n// B\\tvan den Boele\\r\\n// BP\\tvan den Boele – de Vries\\r\\n// P\\tde Vries\\r\\n// PB   de Vries – van den Boele\\r\\nfunction generateSurname() {\\r\\n    let nickName = Person.Name.NickName;\\r\\n    let middleName = Person.Name.FamilyNamePrefix;\\r\\n    let lastName = Person.Name.FamilyName;\\r\\n    let middleNamePartner = Person.Name.FamilyNamePartnerPrefix;\\r\\n    let lastNamePartner = Person.Name.FamilyNamePartner;\\r\\n    let convention = Person.Name.Convention;\\r\\n\\r\\n    let surName = '';\\r\\n    switch (convention) {\\r\\n        case \\\"BP\\\":\\r\\n            if (typeof middleName !== 'undefined' && middleName) { surName = surName + middleName + ' ' }\\r\\n            surName = surName + lastName;\\r\\n\\r\\n            surName = surName + ' - ';\\r\\n            if (typeof middleNamePartner !== 'undefined' && middleNamePartner) { surName = surName + middleNamePartner + ' ' }\\r\\n            surName = surName + lastNamePartner;\\r\\n            break;\\r\\n        case \\\"PB\\\":\\r\\n            if (typeof middleNamePartner !== 'undefined' && middleNamePartner) { surName = surName + middleNamePartner + ' ' }\\r\\n            surName = surName + lastNamePartner;\\r\\n\\r\\n            surName = surName + ' - ';\\r\\n            if (typeof middleName !== 'undefined' && middleName) { surName = surName + middleName + ' ' }\\r\\n            surName = surName + lastName;\\r\\n            break;\\r\\n        case \\\"P\\\":\\r\\n            if (typeof middleNamePartner !== 'undefined' && middleNamePartner) { surName = surName + middleNamePartner + ' ' }\\r\\n            surName = surName + lastNamePartner;\\r\\n            break;\\r\\n        case \\\"B\\\":\\r\\n        default:\\r\\n            if (typeof middleName !== 'undefined' && middleName) { surName = surName + middleName + ' ' }\\r\\n            surName = surName + lastName;\\r\\n            break;\\r\\n    }\\r\\n    // Trim spaces at start and end\\r\\n    surName = surName.trim();\\r\\n\\r\\n    // Shorten string to maxAttributeLength \\r\\n    const maxAttributeLength = 64;\\r\\n    surName = surName.substring(0, maxAttributeLength);\\r\\n\\r\\n    return surName;\\r\\n}\\r\\n\\r\\ngenerateSurname();\"",
+            "UsedInNotifications": false,
+            "StoreInAccountData": true
+          }
+        ]
+      },
+      {
+        "Name": "AutoKeyEdit.ROMCode",
+        "Description": "Serial number (in SALTO format) of the card to be automatically issued to the user when presented in an online key updater.\n\nThis must be the unique identifier in the card or CSN number of the card\nNull = CSN or Identifier",
+        "Type": "Text",
+        "MappingActions": [
+          {
+            "MapForActions": [
+              "Create"
+            ],
+            "MappingMode": "Fixed",
+            "Value": "\"\"",
+            "UsedInNotifications": false,
+            "StoreInAccountData": false
+          }
+        ]
+      },
+      {
+        "Name": "GPF5",
+        "Description": "General purpose field #5.\nUsually used for storing the correlation value (emploiyeeId)\nNull = Any value allowed",
+        "Type": "Text",
+        "MappingActions": [
+          {
+            "MapForActions": [
+              "Create"
+            ],
+            "MappingMode": "Field",
+            "Value": "\"Person.ExternalId\"",
+            "UsedInNotifications": false,
+            "StoreInAccountData": false
+          }
+        ]
+      }
+    ],
+    "UniqueFieldNames": []
+  }
