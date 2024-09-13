@@ -93,17 +93,15 @@ function ConvertTo-FlatObject {
     foreach ($property in $Object.PSObject.Properties) {
         $name = if ($Prefix) { "$Prefix`.$($property.Name)" } else { $property.Name }
  
-        #if ($null -ne $property.Value) {
-            if ($property.Value -is [pscustomobject]) {
-                $flattenedSubObject = ConvertTo-FlatObject -Object $property.Value -Prefix $name
-                foreach ($subProperty in $flattenedSubObject.PSObject.Properties) {
-                    $result[$subProperty.Name] = [string]$subProperty.Value
-                }
+        if ($property.Value -is [pscustomobject]) {
+            $flattenedSubObject = ConvertTo-FlatObject -Object $property.Value -Prefix $name
+            foreach ($subProperty in $flattenedSubObject.PSObject.Properties) {
+                $result[$subProperty.Name] = [string]$subProperty.Value
             }
-            else {
-                $result[$name] = [string]$property.Value
-            }
-        #}
+        }
+        else {
+            $result[$name] = [string]$property.Value
+        }
     }
     [PSCustomObject]$result
 }
@@ -152,7 +150,7 @@ try {
         Invoke-SQLQuery @sqlQueryGetSaltoAccountSplatParams -Data ([ref]$sqlQueryGetSaltoAccountResult)
 
         # ExtUserId = current user ExtId; we will use the correlationvalue as the unique id for new users
-        $account =  ConvertTo-FlatObject -Object $outputContext.Data
+        $account = ConvertTo-FlatObject -Object $outputContext.Data
 
         if (-not [string]::IsNullOrEmpty($sqlQueryGetSaltoAccountResult.ExtID)) {
             $account.ExtUserId = $sqlQueryGetSaltoAccountResult.ExtID
@@ -169,14 +167,16 @@ try {
             }
 
             Invoke-SQLQuery @sqlQueryGetSaltoStagingAccountSplatParams -Data ([ref]$sqlQueryGetSaltoStagingAccountResult)
-            
+
             if ($null -eq $sqlQueryGetSaltoStagingAccountResult.ExtUserId) {
                 $action = 'CreateAccount'
-            } else {
+            }
+            else {
                 $action = 'CorrelateAccount'
                 $correlatedAccount = $sqlQueryGetSaltoStagingAccountResult
             }
-        } else {
+        }
+        else {
             $account.ExtUserId = $correlationValue
             $action = 'CreateAccount'
         }
@@ -196,7 +196,7 @@ try {
                 SqlQuery         = $sqlQueryAccountCreate
                 ErrorAction      = 'Stop'
             }
-            
+
             # Make sure to test with special characters and if needed; add utf8 encoding.
             if (-not($actionContext.DryRun -eq $true)) {
                 Write-Information 'Creating and correlating SaltoSpace account'
@@ -205,7 +205,8 @@ try {
 
                 $outputContext.Data = $account
                 $outputContext.AccountReference = $account.ExtUserId
-            } else {
+            }
+            else {
                 Write-Information '[DryRun] Create and correlate SaltoSpace account, will be executed during enforcement'
                 Write-Information "Would run query [$sqlQueryAccountCreate]"
                 $outputContext.Data = $account
@@ -217,7 +218,7 @@ try {
 
         'CorrelateAccount' {
             Write-Information 'Correlating SaltoSpace account'
-            
+
             $outputContext.Data = $correlatedAccount
             $outputContext.AccountReference = $correlatedAccount.ExtUserId
             $outputContext.AccountCorrelated = $true
@@ -225,14 +226,15 @@ try {
             break
         }
     }
-        
+
     $outputContext.success = $true
     $outputContext.AuditLogs.Add([PSCustomObject]@{
             Action  = $action
             Message = $auditLogMessage
             IsError = $false
         })
-} catch {   
+}
+catch {
     $outputContext.success = $false
     $ex = $PSItem
 

@@ -1,46 +1,113 @@
 #################################################
-# HelloID-Conn-Prov-Target-{connectorName}-Update
+# HelloID-Conn-Prov-Target-SaltoSpace-Update
 # PowerShell V2
 #################################################
+
+$actionContext.DryRun = $false
+
+$actionContext.References.Account = 'CE040D2C2EE640659D24B8F321A004CC'
+
+# Set debug logging
+switch ($($actionContext.Configuration.isDebug)) {
+    $true { $VerbosePreference = "Continue" }
+    $false { $VerbosePreference = "SilentlyContinue" }
+}
 
 # Enable TLS1.2
 [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor [System.Net.SecurityProtocolType]::Tls12
 
 #region functions
-function Resolve-{connectorName}Error {
-    [CmdletBinding()]
-    param (
-        [Parameter(Mandatory)]
-        [object]
-        $ErrorObject
+function Invoke-SQLQuery {
+    param(
+        [parameter(Mandatory = $true)]
+        $ConnectionString,
+
+        [parameter(Mandatory = $false)]
+        $Username,
+
+        [parameter(Mandatory = $false)]
+        $Password,
+
+        [parameter(Mandatory = $true)]
+        $SqlQuery,
+
+        [parameter(Mandatory = $true)]
+        [ref]$Data
     )
-    process {
-        $httpErrorObj = [PSCustomObject]@{
-            ScriptLineNumber = $ErrorObject.InvocationInfo.ScriptLineNumber
-            Line             = $ErrorObject.InvocationInfo.Line
-            ErrorDetails     = $ErrorObject.Exception.Message
-            FriendlyMessage  = $ErrorObject.Exception.Message
+    try {
+        $Data.value = $null
+
+        # Initialize connection and execute query
+        if (-not[String]::IsNullOrEmpty($Username) -and -not[String]::IsNullOrEmpty($Password)) {
+
+            # First create the PSCredential object
+            $securePassword = ConvertTo-SecureString -String $Password -AsPlainText -Force
+            $credential = [System.Management.Automation.PSCredential]::new($Username, $securePassword)
+
+            # Create the SqlCredential object
+            $sqlCredential = [System.Data.SqlClient.SqlCredential]::new($credential.username, $credential.password)
         }
-        if (-not [string]::IsNullOrEmpty($ErrorObject.ErrorDetails.Message)) {
-            $httpErrorObj.ErrorDetails = $ErrorObject.ErrorDetails.Message
-        } elseif ($ErrorObject.Exception.GetType().FullName -eq 'System.Net.WebException') {
-            if ($null -ne $ErrorObject.Exception.Response) {
-                $streamReaderResponse = [System.IO.StreamReader]::new($ErrorObject.Exception.Response.GetResponseStream()).ReadToEnd()
-                if (-not [string]::IsNullOrEmpty($streamReaderResponse)) {
-                    $httpErrorObj.ErrorDetails = $streamReaderResponse
-                }
+
+        # Connect to the SQL server
+        $SqlConnection = [System.Data.SqlClient.SqlConnection]::new()
+        $SqlConnection.ConnectionString = “$ConnectionString”
+        if (-not[String]::IsNullOrEmpty($sqlCredential)) {
+            $SqlConnection.Credential = $sqlCredential
+        }
+        $SqlConnection.Open()
+        Write-Verbose "Successfully connected to SQL database" 
+
+        # Set the query
+        $SqlCmd = [System.Data.SqlClient.SqlCommand]::new()
+        $SqlCmd.Connection = $SqlConnection
+        $SqlCmd.CommandText = $SqlQuery
+
+        # Set the data adapter
+        $SqlAdapter = [System.Data.SqlClient.SqlDataAdapter]::new()
+        $SqlAdapter.SelectCommand = $SqlCmd
+
+        # Set the output with returned data
+        $DataSet = [System.Data.DataSet]::new()
+        $null = $SqlAdapter.Fill($DataSet)
+
+        # Set the output with returned data
+        $Data.value = $DataSet.Tables[0] | Select-Object -Property * -ExcludeProperty RowError, RowState, Table, ItemArray, HasErrors
+    }
+    catch {
+        $Data.Value = $null
+        Write-Error $_
+    }
+    finally {
+        if ($SqlConnection.State -eq "Open") {
+            $SqlConnection.close()
+        }
+        Write-Verbose "Successfully disconnected from SQL database"
+    }
+}
+
+function ConvertTo-FlatObject {
+    param (
+        [Parameter(Mandatory = $true)]
+        [pscustomobject] $Object,
+        [string] $Prefix = ""
+    )
+ 
+    $result = [ordered]@{}
+ 
+    foreach ($property in $Object.PSObject.Properties) {
+        $name = if ($Prefix) { "$Prefix`.$($property.Name)" } else { $property.Name }
+ 
+        if ($property.Value -is [pscustomobject]) {
+            $flattenedSubObject = ConvertTo-FlatObject -Object $property.Value -Prefix $name
+            foreach ($subProperty in $flattenedSubObject.PSObject.Properties) {
+                $result[$subProperty.Name] = [string]$subProperty.Value
             }
         }
-        try {
-            $errorDetailsObject = ($httpErrorObj.ErrorDetails | ConvertFrom-Json)
-            # Make sure to inspect the error result object and add only the error message as a FriendlyMessage.
-            # $httpErrorObj.FriendlyMessage = $errorDetailsObject.message
-            $httpErrorObj.FriendlyMessage = $httpErrorObj.ErrorDetails # Temporarily assignment
-        } catch {
-            $httpErrorObj.FriendlyMessage = $httpErrorObj.ErrorDetails
+        else {
+            $result[$name] = [string]$property.Value
         }
-        Write-Output $httpErrorObj
     }
+    [PSCustomObject]$result
 }
 #endregion
 
@@ -50,16 +117,39 @@ try {
         throw 'The account reference could not be found'
     }
 
-    Write-Information 'Verifying if a {connectorName} account exists'
-    $correlatedAccount = 'userInfo'
-    $outputContext.PreviousData = $correlatedAccount
+    Write-Verbose 'Verifying if a SaltoSpace account exists'
+
+    # Get account from staging table
+    $account = ConvertTo-FlatObject -Object $outputContext.Data
+    $sqlQueryGetAccount = "SELECT $("[" + ($account.PSObject.Properties.Name -join "],[") + "]") FROM [dbo].[$($actionContext.Configuration.dbTableStaging)] WHERE [ExtUserId] = '$($actionContext.References.Account)'"
+    Write-Verbose "Running query to get account in Salto Staging table: [$sqlQueryGetAccount]"
+
+    $sqlQueryGetAccountResult = [System.Collections.ArrayList]::new()
+    $sqlQueryGetAccountSplatParams = @{
+        ConnectionString = $actionContext.Configuration.connectionStringStaging
+        SqlQuery         = $sqlQueryGetAccount
+        ErrorAction      = 'Stop'
+    }
+
+    Invoke-SQLQuery @sqlQueryGetAccountSplatParams -Data ([ref]$sqlQueryGetAccountResult)
+
+    $correlatedAccount = ConvertTo-FlatObject -Object $sqlQueryGetAccountResult
+    
+    $outputContext.PreviousData = $correlatedAccount  
+    
+    # ACTION SHOULD NOT BE COMPARED! (Todo: check if this is the best place to do this)
+    $correlatedAccount.PSObject.Properties.Remove('Action')
+    $account.PSObject.Properties.Remove('Action')
+
+    # DATE COMPARE MUST STILL BE FIXED
 
     # Always compare the account against the current account in target system
     if ($null -ne $correlatedAccount) {
         $splatCompareProperties = @{
             ReferenceObject  = @($correlatedAccount.PSObject.Properties)
-            DifferenceObject = @($actionContext.Data.PSObject.Properties)
+            DifferenceObject = @($account.PSObject.Properties)
         }
+
         $propertiesChanged = Compare-Object @splatCompareProperties -PassThru | Where-Object { $_.SideIndicator -eq '=>' }
         if ($propertiesChanged) {
             $action = 'UpdateAccount'
@@ -74,14 +164,26 @@ try {
     switch ($action) {
         'UpdateAccount' {
             Write-Information "Account property(s) required to update: $($propertiesChanged.Name -join ', ')"
-
-            # Make sure to test with special characters and if needed; add utf8 encoding.
+            $sqlQueryUpdateAccount = "UPDATE [dbo].[$($actionContext.Configuration.dbTableStaging)] SET"
+            foreach ($property in $propertiesChanged) {
+                $sqlQueryUpdateAccountPart = "$sqlQueryUpdateAccountPart [$($property.Name)] = '$($property.Value)', "
+            }
+            $sqlQueryUpdateAccount = "$sqlQueryUpdateAccount $sqlQueryUpdateAccountPart [Action] = $($actionContext.data.Action) WHERE [ExtUserId] = '$($actionContext.References.Account)'"
+            Write-Verbose "Running query to update account in Salto Staging table: [$sqlQueryUpdateAccount]"
+            
+            # Make sure to test with special characters and if needed; add utf8 encoding. # Special chars tested (Rick)
             if (-not($actionContext.DryRun -eq $true)) {
-                Write-Information "Updating {connectorName} account with accountReference: [$($actionContext.References.Account)]"
-                # < Write Update logic here >
-
+                Write-Information "Updating SaltoSpace account with accountReference: [$($actionContext.References.Account)]"
+                
+                $sqlQueryUpdateAccountResult = [System.Collections.ArrayList]::new()
+                $sqlQueryUpdateAccountSplatParams = @{
+                    ConnectionString = $actionContext.Configuration.connectionStringStaging
+                    SqlQuery         = $sqlQueryUpdateAccount
+                    ErrorAction      = 'Stop'
+                }
+                Invoke-SQLQuery @sqlQueryGetAccountSplatParams -Data ([ref]$sqlQueryUpdateAccountResult)
             } else {
-                Write-Information "[DryRun] Update {connectorName} account with accountReference: [$($actionContext.References.Account)], will be executed during enforcement"
+                Write-Information "[DryRun] Update SaltoSpace account with accountReference: [$($actionContext.References.Account)], will be executed during enforcement"
             }
 
             $outputContext.Success = $true
@@ -93,7 +195,7 @@ try {
         }
 
         'NoChanges' {
-            Write-Information "No changes to {connectorName} account with accountReference: [$($actionContext.References.Account)]"
+            Write-Information "No changes to SaltoSpace account with accountReference: [$($actionContext.References.Account)]"
 
             $outputContext.Success = $true
             $outputContext.AuditLogs.Add([PSCustomObject]@{
@@ -104,27 +206,22 @@ try {
         }
 
         'NotFound' {
-            Write-Information "{connectorName} account: [$($actionContext.References.Account)] could not be found, possibly indicating that it could be deleted"
+            Write-Information "SaltoSpace account: [$($actionContext.References.Account)] could not be found, possibly indicating that it could be deleted"
             $outputContext.Success = $false
             $outputContext.AuditLogs.Add([PSCustomObject]@{
-                    Message = "{connectorName} account with accountReference: [$($actionContext.References.Account)] could not be found, possibly indicating that it could be deleted"
+                    Message = "SaltoSpace account with accountReference: [$($actionContext.References.Account)] could not be found, possibly indicating that it could be deleted"
                     IsError = $true
                 })
             break
         }
     }
 } catch {
-    $outputContext.Success  = $false
+    $outputContext.success = $false
     $ex = $PSItem
-    if ($($ex.Exception.GetType().FullName -eq 'Microsoft.PowerShell.Commands.HttpResponseException') -or
-        $($ex.Exception.GetType().FullName -eq 'System.Net.WebException')) {
-        $errorObj = Resolve-{connectorName}Error -ErrorObject $ex
-        $auditMessage = "Could not update {connectorName} account. Error: $($errorObj.FriendlyMessage)"
-        Write-Warning "Error at Line '$($errorObj.ScriptLineNumber)': $($errorObj.Line). Error: $($errorObj.ErrorDetails)"
-    } else {
-        $auditMessage = "Could not update {connectorName} account. Error: $($ex.Exception.Message)"
-        Write-Warning "Error at Line '$($ex.InvocationInfo.ScriptLineNumber)': $($ex.InvocationInfo.Line). Error: $($ex.Exception.Message)"
-    }
+
+    $auditMessage = "Could not create or correlate SaltoSpace account. Error: $($ex.Exception.Message)"
+    Write-Warning "Error at Line '$($ex.InvocationInfo.ScriptLineNumber)': $($ex.InvocationInfo.Line). Error: $($ex.Exception.Message)"
+    
     $outputContext.AuditLogs.Add([PSCustomObject]@{
             Message = $auditMessage
             IsError = $true
