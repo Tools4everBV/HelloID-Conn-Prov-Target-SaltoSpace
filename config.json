@@ -1,85 +1,68 @@
 [
   {
-    "key": "connection.server",
+    "key": "connectionStringSalto",
     "type": "input",
     "defaultValue": "",
     "templateOptions": {
-      "label": "SQL Server\\instance",
-      "placeholder": "Please enter the Salto server\\instance",
+      "label": "Connection string",
+      "placeholder": "Data Source=server\\instance;Trusted_Connection=True;Initial Catalog=Salto_RW",
+      "description": "The connection string used to connect to the Salto SQL database. Must include Initial Catalog",
       "required": true
     }
   },
   {
-    "key": "connection.database.salto_space",
+    "key": "connectionStringStaging",
     "type": "input",
     "defaultValue": "",
     "templateOptions": {
-      "label": "Salto Space database name",
-      "placeholder": "Please enter the name of the Salto Space database",
-      "description": "",
+      "label": "Connection string",
+      "placeholder": "Data Source=server\\instance;;Trusted_Connection=True;Initial Catalog=SALTO_INTERFACES;",
+      "description": "The connection string used to connect to the Staging SQL database. Must include Initial Catalog",
       "required": true
     }
   },
   {
-    "key": "connection.database.salto_interfaces",
+    "key": "username",
     "type": "input",
     "defaultValue": "",
     "templateOptions": {
-      "label": "Salto & HelloID staging database name",
-      "placeholder": "Please enter the name of the Salto & HelloID Staging database",
-      "description": "",
-      "required": true
+      "label": "Username",
+      "placeholder": "sa_helloid",
+      "description": "Optional: The username of the SQL user to use in the connection string",
+      "required": false
     }
   },
   {
-    "key": "connection.table.salto_staging",
+    "key": "password",
+    "type": "input",
+    "defaultValue": "",
+    "templateOptions": {
+      "label": "Password",
+      "type": "password",
+      "placeholder": "P@ssw0rd1!",
+      "description": "Optional: The username of the SQL user to use in the connection string",
+      "required": false
+    }
+  },
+  {
+    "key": "DbTableStaging",
     "type": "input",
     "defaultValue": "",
     "templateOptions": {
       "label": "Salto staging table name",
-      "placeholder": "Please enter the name of the Salto staging table",
-      "description": "",
+      "placeholder": "SaltoCardholdersSQLServer",
+      "description": "Please enter the name of the Salto staging table",
       "required": true
     }
   },
   {
-    "key": "connection.table.helloid_user",
-    "type": "input",
-    "defaultValue": "HelloIdUser",
+    "key": "isDebug",
+    "type": "checkbox",
+    "defaultValue": false,
     "templateOptions": {
-      "label": "HelloID user table name",
-      "placeholder": "Please enter the name of the HelloID user table",
-      "description": "",
-      "required": true
-    }
-  },
-  {
-    "key": "connection.table.helloid_membership",
-    "type": "input",
-    "defaultValue": "HelloIdMembership",
-    "templateOptions": {
-      "label": "HelloID membership table name",
-      "placeholder": "Please enter the name of the HelloID membership table",
-      "description": "",
-      "required": true
-    }
-  },
-  {
-    "key": "correlationAccountFieldSaltoStaging",
-    "type": "input",
-    "defaultValue": "GPF2",
-    "templateOptions": {
-      "label": "Account correlation field in Salto Staging table",
-      "required": true
-    }
-  },
-  {
-    "key": "correlationAccountFieldSaltoSpace",
-    "type": "input",
-    "defaultValue": "DUMMY2",
-    "templateOptions": {
-      "label": "Account Correlation Field in Salto Space database",
-      "required": true
+      "label": "Toggle debug logging",
+      "description": "When toggled, debug logging will be displayed",
+      "required": false
     }
   }
 ]
