@@ -134,13 +134,11 @@ try {
     Invoke-SQLQuery @sqlQueryGetAccountSplatParams -Data ([ref]$sqlQueryGetAccountResult)
 
     $correlatedAccount = ConvertTo-FlatObject -Object $sqlQueryGetAccountResult
-    
-    $outputContext.PreviousData = $correlatedAccount  
-    
-    # ACTION SHOULD NOT BE COMPARED! (Todo: check if this is the best place to do this)
-    $correlatedAccount.PSObject.Properties.Remove('Action')
-    $account.PSObject.Properties.Remove('Action')
 
+    $outputContext.PreviousData = $correlatedAccount
+
+    
+    
     # DATE COMPARE MUST STILL BE FIXED
 
     # Always compare the account against the current account in target system
@@ -150,7 +148,9 @@ try {
             DifferenceObject = @($account.PSObject.Properties)
         }
 
-        $propertiesChanged = Compare-Object @splatCompareProperties -PassThru | Where-Object { $_.SideIndicator -eq '=>' }
+        # Action and ToBeProcessedBySalto should not be compared
+        $propertiesChanged = Compare-Object @splatCompareProperties -PassThru | Where-Object { $_.SideIndicator -eq '=>' -and $_.Name -ne 'Action' -and $_.Name -ne 'ToBeProcessedBySalto'}
+
         if ($propertiesChanged) {
             $action = 'UpdateAccount'
         } else {
@@ -170,18 +170,18 @@ try {
             }
             $sqlQueryUpdateAccount = "$sqlQueryUpdateAccount $sqlQueryUpdateAccountPart [Action] = $($actionContext.data.Action) WHERE [ExtUserId] = '$($actionContext.References.Account)'"
             Write-Verbose "Running query to update account in Salto Staging table: [$sqlQueryUpdateAccount]"
-            
+
             # Make sure to test with special characters and if needed; add utf8 encoding. # Special chars tested (Rick)
             if (-not($actionContext.DryRun -eq $true)) {
                 Write-Information "Updating SaltoSpace account with accountReference: [$($actionContext.References.Account)]"
-                
+
                 $sqlQueryUpdateAccountResult = [System.Collections.ArrayList]::new()
                 $sqlQueryUpdateAccountSplatParams = @{
                     ConnectionString = $actionContext.Configuration.connectionStringStaging
                     SqlQuery         = $sqlQueryUpdateAccount
                     ErrorAction      = 'Stop'
                 }
-                Invoke-SQLQuery @sqlQueryGetAccountSplatParams -Data ([ref]$sqlQueryUpdateAccountResult)
+                Invoke-SQLQuery @sqlQueryUpdateAccountSplatParams -Data ([ref]$sqlQueryUpdateAccountResult)
             } else {
                 Write-Information "[DryRun] Update SaltoSpace account with accountReference: [$($actionContext.References.Account)], will be executed during enforcement"
             }
@@ -221,7 +221,7 @@ try {
 
     $auditMessage = "Could not create or correlate SaltoSpace account. Error: $($ex.Exception.Message)"
     Write-Warning "Error at Line '$($ex.InvocationInfo.ScriptLineNumber)': $($ex.InvocationInfo.Line). Error: $($ex.Exception.Message)"
-    
+
     $outputContext.AuditLogs.Add([PSCustomObject]@{
             Message = $auditMessage
             IsError = $true

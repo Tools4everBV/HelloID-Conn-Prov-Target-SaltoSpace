@@ -159,6 +159,22 @@
       ]
     },
     {
+      "Name": "GPF2",
+      "Description": "General purpose field #2.\nNull = Any value allowed",
+      "Type": "Text",
+      "MappingActions": [
+        {
+          "MapForActions": [
+            "Create"
+          ],
+          "MappingMode": "Fixed",
+          "Value": "\"\"",
+          "UsedInNotifications": false,
+          "StoreInAccountData": false
+        }
+      ]
+    },
+    {
       "Name": "GPF3",
       "Description": "General purpose field #3.\nNull = Any value allowed",
       "Type": "Text",
@@ -241,22 +257,6 @@
       ]
     },
     {
-      "Name": "GPF2",
-      "Description": "General purpose field #2.\nNull = Any value allowed",
-      "Type": "Text",
-      "MappingActions": [
-        {
-          "MapForActions": [
-            "Create"
-          ],
-          "MappingMode": "Field",
-          "Value": "\"Person.ExternalId\"",
-          "UsedInNotifications": false,
-          "StoreInAccountData": false
-        }
-      ]
-    },
-    {
       "Name": "GPF5",
       "Description": "General purpose field #5.\nUsually used for storing the correlation value (emploiyeeId)\nNull = Any value allowed",
       "Type": "Text",
@@ -265,8 +265,8 @@
           "MapForActions": [
             "Create"
           ],
-          "MappingMode": "None",
-          "Value": "\"\"",
+          "MappingMode": "Field",
+          "Value": "\"Person.ExternalId\"",
           "UsedInNotifications": false,
           "StoreInAccountData": false
         }
