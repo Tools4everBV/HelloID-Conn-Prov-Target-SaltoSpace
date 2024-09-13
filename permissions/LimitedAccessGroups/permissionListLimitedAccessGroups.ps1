@@ -5,7 +5,7 @@ $sqlConnectionString = "Server=$sqlInstance;Database=$sqlDatabaseSaltoSpace;Trus
 
 $sqlQueryAccessGroupsList = 'SELECT [Name]
       ,[ExtID]
-  FROM [SALTO_SPACE].[dbo].[tb_Limited_Groups] As Groups WHERE ExtID IS NOT NULL'
+  FROM [dbo].[tb_Limited_Groups] As Groups WHERE ExtID IS NOT NULL'
 
 try {
     $sqlConnection = New-Object System.Data.SqlClient.SqlConnection

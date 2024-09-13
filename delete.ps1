@@ -83,7 +83,21 @@ try {
     }
 
     Write-Information 'Verifying if a SaltoSpace account exists'
-    $correlatedAccount = 'userInfo'
+    # Get account from staging table
+    $account = ConvertTo-FlatObject -Object $outputContext.Data
+    $sqlQueryGetAccount = "SELECT $("[" + ($account.PSObject.Properties.Name -join "],[") + "]") FROM [dbo].[$($actionContext.Configuration.dbTableStaging)] WHERE [ExtUserId] = '$($actionContext.References.Account)'"
+    Write-Verbose "Running query to get account in Salto Staging table: [$sqlQueryGetAccount]"
+
+    $sqlQueryGetAccountResult = [System.Collections.ArrayList]::new()
+    $sqlQueryGetAccountSplatParams = @{
+        ConnectionString = $actionContext.Configuration.connectionStringStaging
+        SqlQuery         = $sqlQueryGetAccount
+        ErrorAction      = 'Stop'
+    }
+
+    Invoke-SQLQuery @sqlQueryGetAccountSplatParams -Data ([ref]$sqlQueryGetAccountResult)
+
+    $correlatedAccount = ConvertTo-FlatObject -Object $sqlQueryGetAccountResult
 
     if ($null -ne $correlatedAccount) {
         $action = 'DeleteAccount'
@@ -96,7 +110,14 @@ try {
         'DeleteAccount' {
             if (-not($actionContext.DryRun -eq $true)) {
                 Write-Information "Deleting SaltoSpace account with accountReference: [$($actionContext.References.Account)]"
-                # < Write Delete logic here >
+                $sqlQueryDeleteAccount = "UPDATE [dbo].[$($actionContext.Configuration.dbTableStaging)] SET [Action] = $($actionContext.Data.Action), [ToBeProcessedBySalto] = $($actionContext.Data.ToBeProcessedBySalto) WHERE [ExtUserId] = '$($actionContext.References.Account)'"
+                $sqlQueryDeleteAccountResult = [System.Collections.ArrayList]::new()
+                $sqlQueryDeleteAccountSplatParams = @{
+                    ConnectionString = $actionContext.Configuration.connectionStringStaging
+                    SqlQuery         = $sqlQueryDeleteAccount
+                    ErrorAction      = 'Stop'
+                }
+                Invoke-SQLQuery @sqlQueryDeleteAccountSplatParams -Data ([ref]$sqlQueryDeleteAccountResult)
 
             } else {
                 Write-Information "[DryRun] Delete SaltoSpace account with accountReference: [$($actionContext.References.Account)], will be executed during enforcement"
@@ -123,15 +144,10 @@ try {
 } catch {
     $outputContext.success = $false
     $ex = $PSItem
-    if ($($ex.Exception.GetType().FullName -eq 'Microsoft.PowerShell.Commands.HttpResponseException') -or
-        $($ex.Exception.GetType().FullName -eq 'System.Net.WebException')) {
-        $errorObj = Resolve-SaltoSpaceError -ErrorObject $ex
-        $auditMessage = "Could not delete SaltoSpace account. Error: $($errorObj.FriendlyMessage)"
-        Write-Warning "Error at Line '$($errorObj.ScriptLineNumber)': $($errorObj.Line). Error: $($errorObj.ErrorDetails)"
-    } else {
-        $auditMessage = "Could not delete SaltoSpace account. Error: $($_.Exception.Message)"
-        Write-Warning "Error at Line '$($ex.InvocationInfo.ScriptLineNumber)': $($ex.InvocationInfo.Line). Error: $($ex.Exception.Message)"
-    }
+
+    $auditMessage = "Could not delete SaltoSpace account. Error: $($_.Exception.Message)"
+    Write-Warning "Error at Line '$($ex.InvocationInfo.ScriptLineNumber)': $($ex.InvocationInfo.Line). Error: $($ex.Exception.Message)"
+
     $outputContext.AuditLogs.Add([PSCustomObject]@{
             Message = $auditMessage
             IsError = $true

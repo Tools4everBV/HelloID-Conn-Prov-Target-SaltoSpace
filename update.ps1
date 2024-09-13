@@ -55,7 +55,7 @@ function Invoke-SQLQuery {
             $SqlConnection.Credential = $sqlCredential
         }
         $SqlConnection.Open()
-        Write-Verbose "Successfully connected to SQL database" 
+        Write-Verbose "Successfully connected to SQL database"
 
         # Set the query
         $SqlCmd = [System.Data.SqlClient.SqlCommand]::new()
@@ -168,7 +168,7 @@ try {
             foreach ($property in $propertiesChanged) {
                 $sqlQueryUpdateAccountPart = "$sqlQueryUpdateAccountPart [$($property.Name)] = '$($property.Value)', "
             }
-            $sqlQueryUpdateAccount = "$sqlQueryUpdateAccount $sqlQueryUpdateAccountPart [Action] = $($actionContext.data.Action) WHERE [ExtUserId] = '$($actionContext.References.Account)'"
+            $sqlQueryUpdateAccount = "$sqlQueryUpdateAccount $sqlQueryUpdateAccountPart [Action] = $($actionContext.data.Action), [ToBeProcessedBySalto] = $($actionContext.data.ToBeProcessedBySalto) WHERE [ExtUserId] = '$($actionContext.References.Account)'"
             Write-Verbose "Running query to update account in Salto Staging table: [$sqlQueryUpdateAccount]"
 
             # Make sure to test with special characters and if needed; add utf8 encoding. # Special chars tested (Rick)
@@ -219,7 +219,7 @@ try {
     $outputContext.success = $false
     $ex = $PSItem
 
-    $auditMessage = "Could not create or correlate SaltoSpace account. Error: $($ex.Exception.Message)"
+    $auditMessage = "Could not update SaltoSpace account. Error: $($ex.Exception.Message)"
     Write-Warning "Error at Line '$($ex.InvocationInfo.ScriptLineNumber)': $($ex.InvocationInfo.Line). Error: $($ex.Exception.Message)"
 
     $outputContext.AuditLogs.Add([PSCustomObject]@{
