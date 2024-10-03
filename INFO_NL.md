@@ -1,10 +1,10 @@
 Met behulp van de Salto Space Target Connector koppel je Salto Space via de identity & access management (IAM)-oplossing HelloID van Tools4ever aan diverse bronsystemen. Deze integratie biedt veel voordelen en stroomlijnt onder meer het beheer van zowel toegangsrechten als gebruikersaccount. Automatisering staat daarbij centraal, wat je veel werk uit handen neemt en menselijke fouten voorkomt. HelloID baseert zich altijd op gegevens die het ophaalt uit je bronsystemen. In dit artikel zetten we de mogelijkheden en voordelen van de Salto Space Target Connector uiteen. 
 
-# Wat is Salto Space
+## Wat is Salto Space
 
 Salto Space is een volledig geïntegreerd, intelligent toegangscontroleplatform ontwikkeld door Salto Systems. Het platform is standalone en webgebaseerd. Het omvat managementsoftware voor het op veilige en efficiënte wijze beheren van de toegang tot deuren in een pand. Het systeem is ontwikkeld voor een draadloze omgeving. Het is daardoor niet nodig om toegangspunten in een gebouw te bekabelen, en kan worden toegepast op bestaande deuren en sloten. Salto Space biedt tegelijkertijd ook ondersteuning voor bekabelde sloten. Gebruikers kunnen deuren openen met hun smartphone, pincode of smart keycard.
 
-# Waarom is Salto Space koppeling handig?
+## Waarom is Salto Space koppeling handig?
 
 Bij het faciliteren van een optimale productiviteit denk je wellicht al snel aan het verzorgen van de juiste toegang tot software, databases en cloudapplicaties en -systemen. Minstens net zo belangrijk is echter de fysieke toegang tot het bedrijfspand of ruimtes waar een medewerker aan de slag gaat. Wie het pand immers niet kan betreden, kan niet aan het werk. Salto Space verzorgt deze toegang via een webgebaseerd systeem. Met behulp van de Salto Space Target Connector koppel je Salto Space via HelloID aan je bronsystemen. Dit betekent dat de IAM-oplossing van Tools4ever op basis van je bronsysteem zorgt dat de juiste personen toegang hebben tot de juiste deuren, en bijvoorbeeld een bedrijfspand of specifieke ruimtes binnen dit pand kunnen betreden. 
 
@@ -18,7 +18,7 @@ Met behulp van de Salto Space connector kan je integraties met veelvoorkomende s
 
 Over de koppeling met deze bronsystemen lees je verderop in dit artikel meer.
 
-# Hoe HelloID integreert met Salto Space
+## Hoe HelloID integreert met Salto Space
 
 Je kunt Salto Space als doelsysteem integreren met HelloID. We zetten de Salto Space connector in als doelconnector. De connector maakt het beheer van gebruikersaccount evenals de bijbehorende toegangsgroepen mogelijk. Met behulp van toegangsgroepen kan je de toegangsrechten van een groep gebruikers in één keer beheren. 
 
@@ -34,7 +34,7 @@ HelloID kan op basis van brondata een gebruiker toekennen aan een (gelimiteerde)
 
 Gebruikersaccounts in Salto Space zijn voorzien van diverse vrij in te vullen velden. HelloID kan gegevens afkomstig uit je bronsysteem naar deze velden mappen.
 
-# HelloID voor Salto Space helpt je met
+## HelloID voor Salto Space helpt je met
 
 * **Het sneller aanmaken van accounts:** Door Salto Space aan je bronsystemen te koppelen maakt HelloID automatisch een gebruikersaccount in Salto Space aan op basis van gegevens uit je bronsystemen. Zo stel je zeker dat een nieuwe medewerker direct op de eerste dag fysieke toegang heeft tot de benodigde ruimtes. 
 
@@ -42,7 +42,7 @@ Gebruikersaccounts in Salto Space zijn voorzien van diverse vrij in te vullen ve
 
 * **Het verbeteren van serviceniveaus en versterken van je beveiliging:** De koppeling tussen je bronsystemen en Salto Space tilt je beveiliging naar een hoger niveau. Je stelt onder meer zeker dat werknemers nooit meer toegang hebben dan noodzakelijk, wat de impact beperkt indien bijvoorbeeld een smartphone of keycard wordt gestolen. Tegelijkertijd til je je serviceniveau naar een hoger niveau doordat medewerkers altijd op het juiste moment over de juiste fysieke toegang beschikken. Dit voorkomt frustratie en verhoogt de werknemerstevredenheid. 
 
-# Salto Space via HelloID koppelen met systemen
+## Salto Space via HelloID koppelen met systemen
 
 Via HelloID kan je diverse bronsystemen met Salto Space integreren. De koppelingen tillen het beheer van gebruikersaccounts en de fysieke toegang tot je pand naar een hoger niveau. Voorbeelden van veelvoorkomende integraties zijn: 
 
