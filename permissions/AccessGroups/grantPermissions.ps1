@@ -1,5 +1,6 @@
 #################################################
-# HelloID-Conn-Prov-Target-SaltoSpace-Delete
+# HelloID-Conn-Prov-Target-SaltoSpace-Permissions-Groups-Grant
+# Grant group to account
 # PowerShell V2
 #################################################
 
@@ -135,16 +136,6 @@ function ConvertTo-FlatObject {
 #endregion
 
 try {
-    #region account
-    # Define correlation
-    $correlationField = "ExtId"
-    $correlationValue = $actionContext.References.Account
-
-    # Define account object
-    $account = [PSCustomObject]$actionContext.Data.PsObject.Copy()
-    $account = ConvertTo-FlatObject -Object $account
-    #endRegion account
-
     #region Verify account reference
     $actionMessage = "verifying account reference"
     
@@ -153,115 +144,75 @@ try {
     }
     #endregion Verify account reference
 
-    #region Get account from Salto Staging DB
-    $actionMessage = "querying account where [$correlationField] = [$correlationValue] from Salto Staging DB"
+    #region Get Current Groups of account
+    $actionMessage = "querying current groups for account with ExtId [$($actionContext.References.Account | ConvertTo-Json)]"
 
-    $getSaltoStagingAccountSplatParams = @{
+    $getSaltoUserCurrentGroupsSplatParams = @{
         ConnectionString = $actionContext.Configuration.connectionStringStaging
         Username         = $actionContext.Configuration.username
         Password         = $actionContext.Configuration.password
         SqlQuery         = "
         SELECT
-            [$($account.PSObject.Properties.Name -join "],[")]
+            ExtAccessLevelIDList
         FROM
             [dbo].[$($actionContext.Configuration.dbTableStaging)]
         WHERE
-            [$correlationField] = '$correlationValue'
+            [ExtId] = '$($actionContext.References.Account)'
         "
         Verbose          = $false
         ErrorAction      = "Stop"
     }
 
-    Write-Verbose "SQL Query: $($getSaltoStagingAccountSplatParams.SqlQuery | Out-String)"
-    
-    $getSaltoStagingAccountResponse = [System.Collections.ArrayList]::new()
-    Invoke-SQLQuery @getSaltoStagingAccountSplatParams -Data ([ref]$getSaltoStagingAccountResponse)
+    Write-Verbose "SQL Query: $($getSaltoUserCurrentGroupsSplatParams.SqlQuery | Out-String)"
 
-    Write-Verbose "Queried account where [$correlationField] = [$correlationValue] from Salto Staging DB. Result: $($correlatedAccount | ConvertTo-Json)"
-    #endregion Get account from Salto Staging DB
+    $getSaltoUserCurrentGroupsResponse = [System.Collections.ArrayList]::new()
+    Invoke-SQLQuery @getSaltoUserCurrentGroupsSplatParams -Data ([ref]$getSaltoUserCurrentGroupsResponse)
+    $saltoUserCurrentGroups = $getSaltoUserCurrentGroupsResponse
 
-    $correlatedAccount = $getSaltoStagingAccountResponse
-    if (($correlatedAccount | Measure-Object).count -gt 0) {
-        $correlatedAccount = ConvertTo-FlatObject -Object $correlatedAccount
+    Write-Verbose "Queried current groups for account with ExtId [$($actionContext.References.Account | ConvertTo-Json)]. Result: $($saltoUserCurrentGroups | ConvertTo-Json)"
+    #endregion Get Current Groups of account
+
+    if ($saltoUserCurrentGroups -like "*$($actionContext.References.Permission.ExtID)*") {
+        throw "User with ExtId [$($actionContext.References.Account)] is already member of group [$($actionContext.References.Permission.Name)] with ExtID [$($actionContext.References.Permission.ExtID)]."
     }
+    else {
+        #region Add account to group
+        $actionMessage = "granting group [$($actionContext.References.Permission.Name)] with ExtID [$($actionContext.References.Permission.ExtID)] to account with AccountReference: $($actionContext.References.Account | ConvertTo-Json)"
 
-    #region Calulate action
-    $actionMessage = "calculating action"
-    if (($correlatedAccount | Measure-Object).count -eq 1) {
-        $actionAccount = "Delete"
-    }
-    elseif (($correlatedAccount | Measure-Object).count -eq 0) {
-        $actionAccount = "NotFound"
-    }
-    elseif (($correlatedAccount | Measure-Object).count -gt 1) {
-        $actionAccount = "MultipleFound"
-    }
-    #endregion Calulate action
-
-    #region Process
-    switch ($actionAccount) {
-        "Delete" {
-            #region Delete account             
-            $actionMessage = "deleting account with AccountReference: $($actionContext.References.Account | ConvertTo-Json)"
-
-            $deleteAccountSplatParams = @{
-                ConnectionString = $actionContext.Configuration.connectionStringStaging
-                Username         = $actionContext.Configuration.username
-                Password         = $actionContext.Configuration.password
-                # On the delete action we only support setting Action and ToBeProcessedBySalto
-                SqlQuery         = "
-                UPDATE [dbo].[$($actionContext.Configuration.dbTableStaging)]
-                SET [Action] = '$($actionContext.data.Action)',
-                    [ToBeProcessedBySalto] = '1'
-                WHERE [ExtId] = '$($actionContext.References.Account)'
-                "
-                Verbose          = $false
-                ErrorAction      = "Stop"
-            }
+        $grantPermissionSplatParams = @{
+            ConnectionString = $actionContext.Configuration.connectionStringStaging
+            Username         = $actionContext.Configuration.username
+            Password         = $actionContext.Configuration.password
+            SqlQuery         = "
+            UPDATE
+                [dbo].[$($actionContext.Configuration.dbTableStaging)]
+            SET
+                [ExtAccessLevelIDList] = TRIM(',' FROM Concat_ws(',', [ExtAccessLevelIDList], '$($actionContext.References.Permission.ExtID)')),
+                [ToBeProcessedBySalto] = '1'
+            WHERE
+                [ExtId] = '$($actionContext.References.Account)'
+            "
+            Verbose          = $false
+            ErrorAction      = "Stop"
+        }
+            
+        Write-Verbose "SQL Query: $($grantPermissionSplatParams.SqlQuery | Out-String)"
         
-            Write-Verbose "SQL Query: $($deleteAccountSplatParams.SqlQuery | Out-String)"
+        if (-Not($actionContext.DryRun -eq $true)) {
+            $grantPermissionResponse = [System.Collections.ArrayList]::new()
+            Invoke-SQLQuery @grantPermissionSplatParams -Data ([ref]$grantPermissionResponse)
 
-            if (-Not($actionContext.DryRun -eq $true)) {
-                $deleteAccountResponse = [System.Collections.ArrayList]::new()
-                Invoke-SQLQuery @deleteAccountSplatParams -Data ([ref]$deleteAccountResponse)
-
-                $outputContext.AuditLogs.Add([PSCustomObject]@{
-                        # Action  = "" # Optional
-                        Message = "Deleted account with AccountReference: $($outputContext.AccountReference | ConvertTo-Json)."
-                        IsError = $false
-                    })
-            }
-            else {
-                Write-Warning "DryRun: Would delete account with AccountReference: $($outputContext.AccountReference | ConvertTo-Json)."
-            }
-            #endregion Delete account
-
-            break
+            $outputContext.AuditLogs.Add([PSCustomObject]@{
+                    # Action  = "" # Optional
+                    Message = "Granted group [$($actionContext.References.Permission.Name)] with ExtID [$($actionContext.References.Permission.ExtID)] to account with AccountReference: $($actionContext.References.Account | ConvertTo-Json)."
+                    IsError = $false
+                })
         }
-
-        "NotFound" {
-            #region No account found
-            $actionMessage = "skipping deleting account"
-
-            # Throw terminal error
-            throw "No account found where [$($correlationField)] = [$($correlationValue)]."
-            #endregion No account found
-
-            break
+        else {
+            Write-Warning "DryRun: Would grant group [$($actionContext.References.Permission.Name)] with ExtID [$($actionContext.References.Permission.ExtID)] to account with AccountReference: $($actionContext.References.Account | ConvertTo-Json)."
         }
-
-        "MultipleFound" {
-            #region Multiple accounts found
-            $actionMessage = "skipping deleting account"
-
-            # Throw terminal error
-            throw "Multiple accounts found where [$($correlationField)] = [$($correlationValue)]. Please correct this to ensure the correlation results in a single unique account."
-            #endregion Multiple accounts found
-
-            break
-        }
+        #endregion Add account to group
     }
-    #endregion Process
 }
 catch {
     $ex = $PSItem
@@ -269,13 +220,22 @@ catch {
     $auditMessage = "Error $($actionMessage). Error: $($ex.Exception.Message)"
     $warningMessage = "Error at Line [$($ex.InvocationInfo.ScriptLineNumber)]: $($ex.InvocationInfo.Line). Error: $($ex.Exception.Message)"
 
-    Write-Warning $warningMessage
+    if ($auditMessage -like "*already member of group*") {
+        $outputContext.AuditLogs.Add([PSCustomObject]@{
+                # Action  = "" # Optional
+                Message = "Skipped granting group [$($actionContext.References.Permission.Name)] with ExtID [$($actionContext.References.Permission.ExtID)] to account with AccountReference: $($actionContext.References.Account | ConvertTo-Json). Reason: User is already member of this group."
+                IsError = $false
+            })
+    }
+    else {
+        Write-Warning $warningMessage
 
-    $outputContext.AuditLogs.Add([PSCustomObject]@{
-            # Action= "" # Optional
-            Message = $auditMessage
-            IsError = $true
-        })
+        $outputContext.AuditLogs.Add([PSCustomObject]@{
+                # Action = "" # Optional
+                Message = $auditMessage
+                IsError = $true
+            })
+    }
 }
 finally {
     # Check if auditLogs contains errors, if no errors are found, set success to true

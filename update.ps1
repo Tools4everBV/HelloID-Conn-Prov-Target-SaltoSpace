@@ -1,203 +1,370 @@
-#Initialize default properties
-$p = $person | ConvertFrom-Json
-$aRef = $accountReference | ConvertFrom-Json
-$success = $false
-$auditMessage = "Account for person " + $p.DisplayName + " not created succesfully"
+#################################################
+# HelloID-Conn-Prov-Target-SaltoSpace-Update
+# PowerShell V2
+#################################################
 
-#Initialize SQL properties
-$config = $configuration | ConvertFrom-Json
-$sqlInstance = $config.connection.server
-$sqlDatabaseHelloId = $config.connection.database.salto_interfaces
-$sqlDatabaseHelloIdAccountTable = $config.connection.table.helloid_user
-$sqlConnectionString = "Server=$sqlInstance;Database=$sqlDatabaseHelloId;Trusted_Connection=True;Integrated Security=true;"
+# Enable TLS1.2
+[System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor [System.Net.SecurityProtocolType]::Tls12
+
+# Set debug logging
+switch ($actionContext.Configuration.isDebug) {
+    $true { $VerbosePreference = "Continue" }
+    $false { $VerbosePreference = "SilentlyContinue" }
+}
+$InformationPreference = "Continue"
+$WarningPreference = "Continue"
+
+#region functions
+function Invoke-SQLQuery {
+    param(
+        [parameter(Mandatory = $true)]
+        $ConnectionString,
+
+        [parameter(Mandatory = $false)]
+        $Username,
+
+        [parameter(Mandatory = $false)]
+        $Password,
+
+        [parameter(Mandatory = $true)]
+        $SqlQuery,
+
+        [parameter(Mandatory = $true)]
+        [ref]$Data
+    )
+    try {
+        $Data.value = $null
+
+        # Initialize connection and execute query
+        if (-not[String]::IsNullOrEmpty($Username) -and -not[String]::IsNullOrEmpty($Password)) {
+            # First create the PSCredential object
+            $securePassword = ConvertTo-SecureString -String $Password -AsPlainText -Force
+            $credential = [System.Management.Automation.PSCredential]::new($Username, $securePassword)
+
+            # Set the password as read only
+            $credential.Password.MakeReadOnly()
+
+            # Create the SqlCredential object
+            $sqlCredential = [System.Data.SqlClient.SqlCredential]::new($credential.username, $credential.password)
+        }
+
+        # Connect to the SQL server
+        $SqlConnection = [System.Data.SqlClient.SqlConnection]::new()
+        $SqlConnection.ConnectionString = “$ConnectionString”
+        if (-not[String]::IsNullOrEmpty($sqlCredential)) {
+            $SqlConnection.Credential = $sqlCredential
+        }
+        $SqlConnection.Open()
+        Write-Verbose "Successfully connected to SQL database" 
+
+        # Set the query
+        $SqlCmd = [System.Data.SqlClient.SqlCommand]::new()
+        $SqlCmd.Connection = $SqlConnection
+        $SqlCmd.CommandText = $SqlQuery
+
+        # Set the data adapter
+        $SqlAdapter = [System.Data.SqlClient.SqlDataAdapter]::new()
+        $SqlAdapter.SelectCommand = $SqlCmd
+
+        # Set the output with returned data
+        $DataSet = [System.Data.DataSet]::new()
+        $null = $SqlAdapter.Fill($DataSet)
+
+        # Set the output with returned data
+        $Data.value = $DataSet.Tables[0] | Select-Object -Property * -ExcludeProperty RowError, RowState, Table, ItemArray, HasErrors
+    }
+    catch {
+        $Data.Value = $null
+        Write-Error $_
+    }
+    finally {
+        if ($SqlConnection.State -eq "Open") {
+            $SqlConnection.close()
+        }
+        Write-Verbose "Successfully disconnected from SQL database"
+    }
+}
+
+function ConvertTo-FlatObject {
+    param (
+        [Parameter(Mandatory = $true)]
+        [pscustomobject] $Object,
+        [string] $Prefix = ""
+    )
+    $result = [ordered]@{}
+
+    foreach ($property in $Object.PSObject.Properties) {
+        $name = if ($Prefix) { "$Prefix`.$($property.Name)" } else { $property.Name }
+
+        if ($property.Value -is [pscustomobject]) {
+            $flattenedSubObject = ConvertTo-FlatObject -Object $property.Value -Prefix $name
+            foreach ($subProperty in $flattenedSubObject.PSObject.Properties) {
+                # Convert boolean values of true and false to string values of 1 and 0
+                if ($subProperty.Value -eq $true) {
+                    $result[$subProperty.Name] = '1'
+                }
+                elseif ($subProperty.Value -eq $false) {
+                    $result[$subProperty.Name] = '0'
+                }
+                elseif ($null -eq $subProperty.Value -or $subProperty.Value -is [System.DBNull]) {
+                    $result[$subProperty.Name] = $null
+                }
+                else {
+                    $result[$subProperty.Name] = [string]$subProperty.Value
+                }
+            }
+        }
+        else {
+            # Convert boolean values of true and false to string values of 1 and 0
+            if ($property.Value -eq $true) {
+                $result[$name] = '1'
+            }
+            elseif ($property.Value -eq $false) {
+                $result[$name] = '0'
+            }
+            elseif ($null -eq $property.Value -or $property.Value -is [System.DBNull]) {
+                $result[$name] = $null
+            }
+            else {
+                $result[$name] = [string]$property.Value
+            }
+        }
+    }
+    Write-Output ([PSCustomObject]$result)
+}
+#endregion
 
 try {
-    #Naming convention
-    if(-Not([string]::IsNullOrEmpty($p.Name.FamilyNamePrefix))) { $prefix = $p.Name.FamilyNamePrefix + " " }
-    if(-Not([string]::IsNullOrEmpty($p.Name.FamilyNamePartnerPrefix))) { $partnerprefix = $p.Name.FamilyNamePartnerPrefix + " " }
+    #region account
+    # Define correlation
+    $correlationField = "ExtId"
+    $correlationValue = $actionContext.References.Account
 
-    # Enddate
-    if ([string]::IsNullOrEmpty($p.PrimaryContract.EndDate)) {
-        $p.PrimaryContract | Add-Member -NotePropertyName EndDate -NotePropertyValue '2099-12-01T00:00:00Z' -Force
+    # Define account object
+    $account = [PSCustomObject]$actionContext.Data.PsObject.Copy()
+    $account = ConvertTo-FlatObject -Object $account
+
+    # Define properties to compare for update
+    $accountPropertiesToCompare = $account.PsObject.Properties.Name | Select-Object -ExcludeProperty 'Action', 'ToBeProcessedBySalto'
+    #endRegion account
+
+    #region Verify account reference
+    $actionMessage = "verifying account reference"
+    
+    if ([string]::IsNullOrEmpty($($actionContext.References.Account))) {
+        throw "The account reference could not be found"
+    }
+    #endregion Verify account reference
+
+    #region Get account from Salto Staging DB
+    $actionMessage = "querying account where [$correlationField] = [$correlationValue] from Salto Staging DB"
+
+    $getSaltoStagingAccountSplatParams = @{
+        ConnectionString = $actionContext.Configuration.connectionStringStaging
+        Username         = $actionContext.Configuration.username
+        Password         = $actionContext.Configuration.password
+        SqlQuery         = "
+        SELECT
+            [$($account.PSObject.Properties.Name -join "],[")]
+        FROM
+            [dbo].[$($actionContext.Configuration.dbTableStaging)]
+        WHERE
+            [$correlationField] = '$correlationValue'
+        "
+        Verbose          = $false
+        ErrorAction      = "Stop"
     }
 
-    #Write-Verbose -Verbose $person
-    Switch ($p.Name.Convention) {
-        "B" {$surname += $prefix + $p.Name.FamilyName}
-        "P" {$surname += $partnerprefix + $p.Name.FamilyNamePartner}
-        "BP" {$surname += $prefix + $p.Name.FamilyName + " - " + $partnerprefix + $p.Name.FamilyNamePartner}
-        "PB" {$surname += $partnerprefix + $p.Name.FamilyNamePartner + " - " + $prefix + $p.Name.FamilyName}
-        default {$surname += $prefix + $p.Name.FamilyName}
+    Write-Verbose "SQL Query: $($getSaltoStagingAccountSplatParams.SqlQuery | Out-String)"
+
+    $getSaltoStagingAccountResponse = [System.Collections.ArrayList]::new()
+    Invoke-SQLQuery @getSaltoStagingAccountSplatParams -Data ([ref]$getSaltoStagingAccountResponse)
+
+    Write-Verbose "Queried account where [$correlationField] = [$correlationValue] from Salto Staging DB. Result: $($correlatedAccount | ConvertTo-Json)"
+    #endregion Get account from Salto Staging DB
+
+    $correlatedAccount = $getSaltoStagingAccountResponse
+    if (($correlatedAccount | Measure-Object).count -gt 0) {
+        $correlatedAccount = ConvertTo-FlatObject -Object $correlatedAccount
     }
+    
+    #region Calulate action
+    $actionMessage = "calculating action"
+    if (($correlatedAccount | Measure-Object).count -eq 1) {
+        $actionMessage = "comparing current account to mapped properties"
 
-    #Most fields can only be 32 chars long...
-    if ($p.PrimaryContract.Department.DisplayName.length -gt 31)  {$p.PrimaryContract.Department = $p.PrimaryContract.Department.DisplayName.subString(0,31)}
-    if ($p.PrimaryContract.CostCenter.Name.length -gt 31)  {$p.PrimaryContract.CostCenter.Name = $p.PrimaryContract.CostCenter.Name.subString(0,31)}
-    if ($p.PrimaryContract.Title.Name.length -gt 31)  {$p.PrimaryContract.Title.Name = $p.PrimaryContract.Title.Name.subString(0,31)}
+        # Set Previous data (if there are no changes between PreviousData and Data, HelloID will log "update finished with no changes")
+        $outputContext.PreviousData = $correlatedAccount.PsObject.Copy()
 
+        # Create reference object from correlated account
+        $accountReferenceObject = $correlatedAccount.PsObject.Copy()
 
-    $account = @{
-        Action                                  = 3
-        ExtUserID                               = $aRef
-        FirstName                               = $p.Name.NickName
-        Lastname                                = $surname # Todo: Custom veld toevoegen voor samengestelde naam!
-        #Title                                  = $null
-        #Office                                 = $null
-        AuditOpenings                           = 1
-        #ExtendedOpeningTimeEnabled             = $null
-        AntipassbackEnabled                     = 1
-        #CalendarID                             = $null
-        GPF1                                    = $p.PrimaryContract.Department.DisplayName
-        GPF2                                    = $p.ExternalId
-        #GPF3                                    = $p.PrimaryContract.CostCenter.Name
-        GPF3                                    = $p.Contact.Business.Address.Locality
-        GPF4                                    = $p.PrimaryContract.Title.Name
-        #GPF5                                   = $null
-        #AutoKeyEdit_ROMCode                    = $null
-        UserActivation                          = $p.PrimaryContract.StartDate
-        UserExpiration_ExpDate                  = $p.PrimaryContract.Enddate
-        #STKE_Period                             = [System.DBNull]::Value
-        #STKE_UnitOfPeriod                      = $null
+        # Create difference object from mapped properties
+        $accountDifferenceObject = $account.PsObject.Copy()
+
+        $accountSplatCompareProperties = @{
+            ReferenceObject  = $accountReferenceObject.PSObject.Properties | Where-Object { $_.Name -in $accountPropertiesToCompare }
+            DifferenceObject = $accountDifferenceObject.PSObject.Properties | Where-Object { $_.Name -in $accountPropertiesToCompare }
+        }
+
+        if ($null -ne $accountSplatCompareProperties.ReferenceObject -and $null -ne $accountSplatCompareProperties.DifferenceObject) {
+            $accountPropertiesChanged = Compare-Object @accountSplatCompareProperties -PassThru
+            $accountOldProperties = $accountPropertiesChanged | Where-Object { $_.SideIndicator -eq "<=" }
+            $accountNewProperties = $accountPropertiesChanged | Where-Object { $_.SideIndicator -eq "=>" }
+        }
+
+        if ($accountNewProperties) {
+            # Create custom object with old and new values
+            $accountChangedPropertiesObject = [PSCustomObject]@{
+                OldValues = @{}
+                NewValues = @{}
+            }
+
+            # Add the old properties to the custom object with old and new values
+            foreach ($accountOldProperty in $accountOldProperties) {
+                $accountChangedPropertiesObject.OldValues.$($accountOldProperty.Name) = $accountOldProperty.Value
+            }
+
+            # Add the new properties to the custom object with old and new values
+            foreach ($accountNewProperty in $accountNewProperties) {
+                $accountChangedPropertiesObject.NewValues.$($accountNewProperty.Name) = $accountNewProperty.Value
+            }
+
+            Write-Verbose "Changed properties: $($accountChangedPropertiesObject | ConvertTo-Json)"
+
+            $actionAccount = "Update"
+        }
+        else {
+            $actionAccount = "NoChanges"
+        }            
+
+        Write-Verbose "Compared current account to mapped properties. Result: $actionAccount"
     }
+    elseif (($correlatedAccount | Measure-Object).count -eq 0) {
+        $actionAccount = "NotFound"
+    }
+    elseif (($correlatedAccount | Measure-Object).count -gt 1) {
+        $actionAccount = "MultipleFound"
+    }
+    #endregion Calulate action
 
-    $queryAccountLookupHelloId = "SELECT ExtUserId FROM [$sqlDatabaseHelloId].[dbo].[$sqlDatabaseHelloIdAccountTable] WHERE ExtUserId = @ExtUserId"
+    #region Process
+    switch ($actionAccount) {
+        "Update" {
+            #region Update account             
+            $actionMessage = "updating account with AccountReference: $($actionContext.References.Account | ConvertTo-Json)"
 
-    $queryAccountCreate = "INSERT INTO [$sqlDatabaseHelloId].[dbo].[$sqlDatabaseHelloIdAccountTable] (
-                             [Action]
-                            ,[ExtUserID]
-                            ,[FirstName]
-                            ,[Lastname]
-                        --  ,[Title]
-                        --  ,[Office]
-                            ,[AuditOpenings]
-                        --  ,[ExtendedOpeningTimeEnabled]
-                            ,[AntipassbackEnabled]
-                        --  ,[CalendarID]
-                            ,[GPF1]
-                            ,[GPF2]
-                            ,[GPF3]
-                            ,[GPF4]
-                        --  ,[GPF5]
-                        --  ,[AutoKeyEdit.ROMCode]
-                            ,[UserActivation]
-                            ,[UserExpiration.ExpDate]
-                        --  ,[STKE.Period]
-                        --  ,[STKE.UnitOfPeriod]
-                            ,ToBeProcessedBySalto
-                        ) VALUES (
-                             @Action
-                            ,@ExtUserID
-                            ,@FirstName
-                            ,@Lastname
-                        --  ,@Title
-                        --  ,@Office
-                            ,@AuditOpenings
-                        --  ,@ExtendedOpeningTimeEnabled
-                            ,@AntipassbackEnabled
-                        --  ,@CalendarID
-                            ,@GPF1
-                            ,@GPF2
-                            ,@GPF3
-                            ,@GPF4
-                        --  ,@GPF5
-                        --  ,@AutoKeyEdit_ROMCode
-                            ,@UserActivation
-                            ,@UserExpiration_ExpDate
-                        --  ,@STKE_Period
-                        --  ,@STKE_UnitOfPeriod
-                            ,1
-                        );"
+            # Create a list of properties to update
+            $updatePropertiesList = [System.Collections.Generic.List[string]]::new()
 
-    $queryAccountUpdate = "UPDATE [$sqlDatabaseHelloId].[dbo].[$sqlDatabaseHelloIdAccountTable]
-                            SET
-                                 [Action] = @Action
-                                ,[ExtUserID] = @ExtUserID
-                                ,[FirstName] = @FirstName
-                            --  ,[Title] = @Title
-                            --  ,[Office] = @Office
-                            --   ,[ExtendedOpeningTimeEnabled] = @ExtendedOpeningTimeEnabled
-                                ,[AntipassbackEnabled] = @AntipassbackEnabled
-                            --  ,[CalendarID] = @CalendarID
-                                ,[GPF1] = @GPF1
-                                ,[GPF2] = @GPF2
-                                ,[GPF3] = @GPF3
-                                ,[GPF4] = @GPF4
-                            --  ,[GPF5] = @GPF5
-                            --  ,[AutoKeyEdit.ROMCode] = @AutoKeyEdit_ROMCode
-                                ,[UserActivation] = @UserActivation
-                                ,[UserExpiration.ExpDate] = @UserExpiration_ExpDate
-                            --  ,[STKE.Period] = @STKE_Period
-                            --  ,[STKE.UnitOfPeriod] = @STKE_UnitOfPeriod
-                                ,ToBeProcessedBySalto = 1
-                            WHERE ExtUserId = @ExtUserId;"
+            foreach ($accountNewProperty in $accountNewProperties) {
+                # Define the value, handling nulls and escaping single quotes
+                $value = if ($accountNewProperty.Value -eq $null) {
+                    'NULL'
+                }
+                else {
+                    "'$($accountNewProperty.Value -replace "'", "''")'"
+                }
+                
+                # Add the property to the list
+                $updatePropertiesList.Add("[$($accountNewProperty.Name)] = $value")
+            }
+            
+            $updateAccountSplatParams = @{
+                ConnectionString = $actionContext.Configuration.connectionStringStaging
+                Username         = $actionContext.Configuration.username
+                Password         = $actionContext.Configuration.password
+                SqlQuery         = "
+                UPDATE
+                    [dbo].[$($actionContext.Configuration.dbTableStaging)]
+                SET
+                    $($updatePropertiesList -join ','),
+                    [Action] = '$($actionContext.data.Action)',
+                    [ToBeProcessedBySalto] = '1'
+                WHERE
+                    [ExtId] = '$($actionContext.References.Account)'
+                "
+                Verbose          = $false
+                ErrorAction      = "Stop"
+            }
+        
+            Write-Verbose "SQL Query: $($updateAccountSplatParams.SqlQuery | Out-String)"
 
-    # Connect to the SQL server
-    $sqlConnection = New-Object System.Data.SqlClient.SqlConnection
-    $sqlConnection.ConnectionString = $sqlConnectionString
-    $sqlConnection.Open()
+            if (-Not($actionContext.DryRun -eq $true)) {
+                $updateAccountResponse = [System.Collections.ArrayList]::new()
+                Invoke-SQLQuery @updateAccountSplatParams -Data ([ref]$updateAccountResponse)
 
-    # Check if user exists in the HelloID staging table
-    $sqlCmd = New-Object System.Data.SqlClient.SqlCommand
-    $sqlCmd.Connection = $sqlConnection
-    $sqlCmd.CommandText = $queryAccountLookupHelloId
-    $account.Keys | Foreach-Object { $null = $sqlCmd.Parameters.Add("@" + $_, "$($account.Item($_))") }
-    $accountExists = $SqlCmd.ExecuteReader()
-    $lookupResult = @()
-    while ($accountExists.Read()) {
-        for ($i = 0; $i -lt $accountExists.FieldCount; $i++) {
-            $lookupResult += $accountExists.GetValue($i)
+                $outputContext.AuditLogs.Add([PSCustomObject]@{
+                        # Action  = "" # Optional
+                        Message = "Updated account with AccountReference: $($outputContext.AccountReference | ConvertTo-Json). Old values: $($accountChangedPropertiesObject.oldValues | ConvertTo-Json). New values: $($accountChangedPropertiesObject.newValues | ConvertTo-Json)."
+                        IsError = $false
+                    })
+            }
+            else {
+                Write-Warning "DryRun: Would update account with AccountReference: $($outputContext.AccountReference | ConvertTo-Json). Old values: $($accountChangedPropertiesObject.oldValues | ConvertTo-Json). New values: $($accountChangedPropertiesObject.newValues | ConvertTo-Json)."
+            }
+            #endregion Update account
+
+            break
+        }
+
+        "NoChanges" {
+            #region No changes
+            $actionMessage = "skipping updating account"
+
+            $outputContext.Data = $correlatedAccount.PsObject.Copy()
+
+            $outputContext.AuditLogs.Add([PSCustomObject]@{
+                    # Action  = "" # Optional
+                    Message = "Skipped updating account with AccountReference: $($actionContext.References.Account | ConvertTo-Json). Reason: No changes."
+                    IsError = $false
+                })
+            #endregion No changes
+
+            break
+        }
+
+        "NotFound" {
+            #region No account found
+            $actionMessage = "updating account"
+
+            # Throw terminal error
+            throw "No account found where [$($correlationField)] = [$($correlationValue)]."
+            #endregion No account found
+
+            break
+        }
+
+        "MultipleFound" {
+            #region Multiple accounts found
+            $actionMessage = "updating account"
+
+            # Throw terminal error
+            throw "Multiple accounts found where [$($correlationField)] = [$($correlationValue)]. Please correct this to ensure the correlation results in a single unique account."
+            #endregion Multiple accounts found
+
+            break
         }
     }
-    $accountExists.Close()
-
-    # Check if user already exists in the HelloID database
-    Switch ($lookupResult.count) {
-         0 {
-            $queryAccount = $queryAccountCreate
-            Write-Verbose -Verbose -Message "Account record does not exist in the HelloID database. Creating account record for person '$($p.displayName)' and ExtUserId '$($account.ExtUserId)'"
-        } 1 {
-            $queryAccount = $queryAccountUpdate
-            Write-Verbose -Verbose -Message "Account record exists in the HelloID database. Updating account record for person '$($p.displayName)' and ExtUserId '$($account.ExtUserId)'"
-        } default {
-            # TODO:"Implement audit stuff here
-            throw "Multiple ($($lookupResult.count)) account records found in the HelloID database for ExtUserId '$accountReference' : " + ($lookupResult | convertTo-Json)
-        }
-    }
-
-    #Do not execute when running preview
-    if (-Not($dryRun -eq $True)) {
-
-        # Run account query
-        $sqlCmd = New-Object System.Data.SqlClient.SqlCommand
-        $sqlCmd.Connection = $sqlConnection
-        $sqlCmd.CommandText = $queryAccount
-        $account.Keys | Foreach-Object { $null = $sqlCmd.Parameters.Add("@" + $_, "$($account.Item($_))") }
-        $null = $SqlCmd.ExecuteNonQuery()
-        $success = $true
-        $auditMessage = "Updated account record for person '$($p.displayName)' and ExtUserId '$($account.ExtUserId)' succesfully"
-        Write-Verbose -Verbose -Message "Updated account record for person '$($p.displayName)' and ExtUserId '$($account.ExtUserId)' succesfully"
-    }
-} catch {
-    if (![string]::IsNullOrEmpty($_.ErrorDetails.Message)) {
-        Write-Verbose -Verbose -Message "Something went wrong $($_.ScriptStackTrace). Error message: '$($_.ErrorDetails.Message)'"
-        $auditMessage = "Account record not updated succesfully: '$($_.ErrorDetails.Message)'"
-    } else {
-        Write-Verbose -Verbose -Message "Something went wrong $($_.ScriptStackTrace). Error message: '$($_)'"
-        $auditMessage = "Account record not updated succesfully: '$($_)'"
-    }
-} finally {
-    $sqlConnection.Close()
+    #endregion Process
 }
+catch {
+    $ex = $PSItem
 
-#build up result
-$result = [PSCustomObject]@{
-    Success          = $success
-    AccountReference = $account.ExtUserID
-    AuditDetails     = $auditMessage
-    Account          = $account
+    $auditMessage = "Error $($actionMessage). Error: $($ex.Exception.Message)"
+    $warningMessage = "Error at Line [$($ex.InvocationInfo.ScriptLineNumber)]: $($ex.InvocationInfo.Line). Error: $($ex.Exception.Message)"
 
-    # Optionally return data for use in other systems
-    ExportData = [PSCustomObject]@{}
+    Write-Warning $warningMessage
+
+    $outputContext.AuditLogs.Add([PSCustomObject]@{
+            # Action = "" # Optional
+            Message = $auditMessage
+            IsError = $true
+        })
 }
-
-Write-Output $result | ConvertTo-Json -Depth 10
+finally {
+    # Check if auditLogs contains errors, if no errors are found, set success to true
+    if (-NOT($outputContext.AuditLogs.IsError -contains $true)) {
+        $outputContext.Success = $true
+    }
+}
