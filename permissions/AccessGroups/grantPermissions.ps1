@@ -1,6 +1,6 @@
 #################################################
-# HelloID-Conn-Prov-Target-SaltoSpace-Permissions-Groups-List
-# List groups as permissions
+# HelloID-Conn-Prov-Target-SaltoSpace-Permissions-Groups-Grant
+# Grant group to account
 # PowerShell V2
 #################################################
 
@@ -136,55 +136,83 @@ function ConvertTo-FlatObject {
 #endregion
 
 try {
-    #region Get Groups
-    $actionMessage = "querying groups"
+    #region Verify account reference
+    $actionMessage = "verifying account reference"
+    
+    if ([string]::IsNullOrEmpty($($actionContext.References.Account))) {
+        throw "The account reference could not be found"
+    }
+    #endregion Verify account reference
 
-    $getSaltoGroupsSplatParams = @{
-        ConnectionString = $actionContext.Configuration.connectionStringSalto
+    #region Get Current Groups of account
+    $actionMessage = "querying current groups for account with ExtId [$($actionContext.References.Account | ConvertTo-Json)]"
+
+    $getSaltoUserCurrentGroupsSplatParams = @{
+        ConnectionString = $actionContext.Configuration.connectionStringStaging
         Username         = $actionContext.Configuration.username
         Password         = $actionContext.Configuration.password
         SqlQuery         = "
         SELECT
-            tb_Groups.Id_Group
-            ,tb_Groups.Name
-            ,tb_Groups.Description
-            ,tb_Groups_Ext.ExtID
+            ExtAccessLevelIDList
         FROM
-            [dbo].[tb_Groups]
-            INNER JOIN [dbo].[tb_Groups_Ext] ON tb_Groups.id_group = tb_Groups_Ext.id_group
+            [dbo].[$($actionContext.Configuration.dbTableStaging)]
+        WHERE
+            [ExtId] = '$($actionContext.References.Account)'
         "
         Verbose          = $false
         ErrorAction      = "Stop"
     }
 
-    Write-Verbose "SQL Query: $($getSaltoGroupsSplatParams.SqlQuery | Out-String)"
-    
-    $getSaltoGroupsResponse = [System.Collections.ArrayList]::new()
-    Invoke-SQLQuery @getSaltoGroupsSplatParams -Data ([ref]$getSaltoGroupsResponse)
-    $saltoGroups = $getSaltoGroupsResponse
+    Write-Verbose "SQL Query: $($getSaltoUserCurrentGroupsSplatParams.SqlQuery | Out-String)"
 
-    Write-Information "Queried groups. Result count: $(($saltoGroups | Measure-Object).Count)"
-    #endregion Get Groups
+    $getSaltoUserCurrentGroupsResponse = [System.Collections.ArrayList]::new()
+    Invoke-SQLQuery @getSaltoUserCurrentGroupsSplatParams -Data ([ref]$getSaltoUserCurrentGroupsResponse)
+    $saltoUserCurrentGroups = $getSaltoUserCurrentGroupsResponse
 
-    #region Send results to HelloID
-    $saltoGroups | ForEach-Object {
-        # Shorten DisplayName to max. 100 chars
-        $displayName = "Group - $($_.name)"
-        $displayName = $displayName.substring(0, [System.Math]::Min(100, $displayName.Length))
+    Write-Verbose "Queried current groups for account with ExtId [$($actionContext.References.Account | ConvertTo-Json)]. Result: $($saltoUserCurrentGroups | ConvertTo-Json)"
+    #endregion Get Current Groups of account
 
-        $outputContext.Permissions.Add(
-            @{
-                displayName    = $displayName
-                identification = @{
-                    Id          = $_.Id_Group
-                    Name        = $_.Name
-                    Description = $_.Description
-                    ExtID       = $_.ExtID
-                }
-            }
-        )
+    if ($saltoUserCurrentGroups -like "*$($actionContext.References.Permission.ExtID)*") {
+        throw "User with ExtId [$($actionContext.References.Account)] is already member of group [$($actionContext.References.Permission.Name)] with ExtID [$($actionContext.References.Permission.ExtID)]."
     }
-    #endregion Send results to HelloID
+    else {
+        #region Add account to group
+        $actionMessage = "granting group [$($actionContext.References.Permission.Name)] with ExtID [$($actionContext.References.Permission.ExtID)] to account with AccountReference: $($actionContext.References.Account | ConvertTo-Json)"
+
+        $grantPermissionSplatParams = @{
+            ConnectionString = $actionContext.Configuration.connectionStringStaging
+            Username         = $actionContext.Configuration.username
+            Password         = $actionContext.Configuration.password
+            SqlQuery         = "
+            UPDATE
+                [dbo].[$($actionContext.Configuration.dbTableStaging)]
+            SET
+                [ExtAccessLevelIDList] = TRIM(',' FROM Concat_ws(',', [ExtAccessLevelIDList], '$($actionContext.References.Permission.ExtID)')),
+                [ToBeProcessedBySalto] = '1'
+            WHERE
+                [ExtId] = '$($actionContext.References.Account)'
+            "
+            Verbose          = $false
+            ErrorAction      = "Stop"
+        }
+            
+        Write-Verbose "SQL Query: $($grantPermissionSplatParams.SqlQuery | Out-String)"
+        
+        if (-Not($actionContext.DryRun -eq $true)) {
+            $grantPermissionResponse = [System.Collections.ArrayList]::new()
+            Invoke-SQLQuery @grantPermissionSplatParams -Data ([ref]$grantPermissionResponse)
+
+            $outputContext.AuditLogs.Add([PSCustomObject]@{
+                    # Action  = "" # Optional
+                    Message = "Granted group [$($actionContext.References.Permission.Name)] with ExtID [$($actionContext.References.Permission.ExtID)] to account with AccountReference: $($actionContext.References.Account | ConvertTo-Json)."
+                    IsError = $false
+                })
+        }
+        else {
+            Write-Warning "DryRun: Would grant group [$($actionContext.References.Permission.Name)] with ExtID [$($actionContext.References.Permission.ExtID)] to account with AccountReference: $($actionContext.References.Account | ConvertTo-Json)."
+        }
+        #endregion Add account to group
+    }
 }
 catch {
     $ex = $PSItem
@@ -192,8 +220,26 @@ catch {
     $auditMessage = "Error $($actionMessage). Error: $($ex.Exception.Message)"
     $warningMessage = "Error at Line [$($ex.InvocationInfo.ScriptLineNumber)]: $($ex.InvocationInfo.Line). Error: $($ex.Exception.Message)"
 
-    Write-Warning $warningMessage
+    if ($auditMessage -like "*already member of group*") {
+        $outputContext.AuditLogs.Add([PSCustomObject]@{
+                # Action  = "" # Optional
+                Message = "Skipped granting group [$($actionContext.References.Permission.Name)] with ExtID [$($actionContext.References.Permission.ExtID)] to account with AccountReference: $($actionContext.References.Account | ConvertTo-Json). Reason: User is already member of this group."
+                IsError = $false
+            })
+    }
+    else {
+        Write-Warning $warningMessage
 
-    # Required to write an error as the listing of permissions doesn't show auditlog
-    Write-Error $auditMessage
+        $outputContext.AuditLogs.Add([PSCustomObject]@{
+                # Action = "" # Optional
+                Message = $auditMessage
+                IsError = $true
+            })
+    }
+}
+finally {
+    # Check if auditLogs contains errors, if no errors are found, set success to true
+    if (-NOT($outputContext.AuditLogs.IsError -contains $true)) {
+        $outputContext.Success = $true
+    }
 }

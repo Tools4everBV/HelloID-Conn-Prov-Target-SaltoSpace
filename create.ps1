@@ -2,15 +2,17 @@
 # HelloID-Conn-Prov-Target-SaltoSpace-Create
 # PowerShell V2
 #################################################
-$actionContext.DryRun = $false
+
 # Enable TLS1.2
 [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor [System.Net.SecurityProtocolType]::Tls12
 
 # Set debug logging
-switch ($($actionContext.Configuration.isDebug)) {
+switch ($actionContext.Configuration.isDebug) {
     $true { $VerbosePreference = "Continue" }
     $false { $VerbosePreference = "SilentlyContinue" }
 }
+$InformationPreference = "Continue"
+$WarningPreference = "Continue"
 
 #region functions
 function Invoke-SQLQuery {
@@ -35,10 +37,12 @@ function Invoke-SQLQuery {
 
         # Initialize connection and execute query
         if (-not[String]::IsNullOrEmpty($Username) -and -not[String]::IsNullOrEmpty($Password)) {
-
             # First create the PSCredential object
             $securePassword = ConvertTo-SecureString -String $Password -AsPlainText -Force
             $credential = [System.Management.Automation.PSCredential]::new($Username, $securePassword)
+
+            # Set the password as read only
+            $credential.Password.MakeReadOnly()
 
             # Create the SqlCredential object
             $sqlCredential = [System.Data.SqlClient.SqlCredential]::new($credential.username, $credential.password)
@@ -87,162 +91,266 @@ function ConvertTo-FlatObject {
         [pscustomobject] $Object,
         [string] $Prefix = ""
     )
- 
     $result = [ordered]@{}
- 
+
     foreach ($property in $Object.PSObject.Properties) {
         $name = if ($Prefix) { "$Prefix`.$($property.Name)" } else { $property.Name }
- 
+
         if ($property.Value -is [pscustomobject]) {
             $flattenedSubObject = ConvertTo-FlatObject -Object $property.Value -Prefix $name
             foreach ($subProperty in $flattenedSubObject.PSObject.Properties) {
-                $result[$subProperty.Name] = [string]$subProperty.Value
+                # Convert boolean values of true and false to string values of 1 and 0
+                if ($subProperty.Value -eq $true) {
+                    $result[$subProperty.Name] = '1'
+                }
+                elseif ($subProperty.Value -eq $false) {
+                    $result[$subProperty.Name] = '0'
+                }
+                elseif ($null -eq $subProperty.Value -or $subProperty.Value -is [System.DBNull]) {
+                    $result[$subProperty.Name] = $null
+                }
+                else {
+                    $result[$subProperty.Name] = [string]$subProperty.Value
+                }
             }
         }
         else {
-            $result[$name] = [string]$property.Value
+            # Convert boolean values of true and false to string values of 1 and 0
+            if ($property.Value -eq $true) {
+                $result[$name] = '1'
+            }
+            elseif ($property.Value -eq $false) {
+                $result[$name] = '0'
+            }
+            elseif ($null -eq $property.Value -or $property.Value -is [System.DBNull]) {
+                $result[$name] = $null
+            }
+            else {
+                $result[$name] = [string]$property.Value
+            }
         }
     }
-    [PSCustomObject]$result
+    Write-Output ([PSCustomObject]$result)
 }
 #endregion
 
 try {
-    # Initial Assignments
-    $outputContext.AccountReference = 'Currently not available'
+    #region account
+    # Define correlation
+    $correlationField = $actionContext.CorrelationConfiguration.accountField
+    $correlationValue = $actionContext.CorrelationConfiguration.personFieldValue
 
-    # Validate correlation configuration
-    if ($actionContext.CorrelationConfiguration.Enabled) {
-        $correlationField = $actionContext.CorrelationConfiguration.accountField
-        $correlationValue = $actionContext.CorrelationConfiguration.accountFieldValue
+    # Define account object
+    $account = [PSCustomObject]$actionContext.Data.PsObject.Copy()
+    #endRegion account
 
-        if ([string]::IsNullOrEmpty($($correlationField))) {
-            throw 'Correlation is enabled but not configured correctly'
+    #region Verify correlation configuration and properties
+    $actionMessage = "verifying correlation configuration and properties"
+
+    if ($actionContext.CorrelationConfiguration.Enabled -eq $true) {
+        if ([string]::IsNullOrEmpty($correlationField)) {
+            throw "Correlation is enabled but not configured correctly."
         }
-        if ([string]::IsNullOrEmpty($($correlationValue))) {
-            throw 'Correlation is enabled but [accountFieldValue] is empty. Please make sure it is correctly mapped'
+        
+        if ([string]::IsNullOrEmpty($correlationValue)) {
+            throw "The correlation value for [$correlationField] is empty. This is likely a mapping issue."
         }
-
-        # Create a small lookup object to make sure the possible correlation fields are translated from the staging column names to the salto db column names
-        # and get the corresponding Salto column name to do the original correlation
-        $correlationMapping = @{
-            'GPF1' = 'Dummy1'
-            'GPF2' = 'Dummy2'
-            'GPF3' = 'Dummy3'
-            'GPF4' = 'Dummy4'
-            'GPF5' = 'Dummy5'
-            # Add more mappings as needed
-        }
-        if ($correlationField -in $correlationMapping.PsObject.Properties.Value) {
-            $correlationFieldSaltoDb = $correlationMapping.$correlationField
-        }
-
-        # Lookup account in Salto DB and lookup the ExtUserId attribute
-        $sqlQueryGetSaltoAccount = "SELECT ExtID FROM [dbo].[tb_Users] INNER JOIN [dbo].[tb_Users_Ext] ON tb_Users.id_user = tb_Users_Ext.id_user WHERE [$correlationFieldSaltoDb] = '$correlationValue'"
-        Write-Verbose "Running query to find Salto Account: [$sqlQueryGetSaltoAccount]"
-
-        $sqlQueryGetSaltoAccountResult = [System.Collections.ArrayList]::new()
-        $sqlQueryGetSaltoAccountSplatParams = @{
-            ConnectionString = $actionContext.Configuration.connectionStringSalto
-            SqlQuery         = $sqlQueryGetSaltoAccount
-            ErrorAction      = 'Stop'
-        }
-        Invoke-SQLQuery @sqlQueryGetSaltoAccountSplatParams -Data ([ref]$sqlQueryGetSaltoAccountResult)
-
-        # ExtUserId = current user ExtId; we will use the correlationvalue as the unique id for new users
-        $account = ConvertTo-FlatObject -Object $outputContext.Data
-
-        if (-not [string]::IsNullOrEmpty($sqlQueryGetSaltoAccountResult.ExtID)) {
-            $account.ExtUserId = $sqlQueryGetSaltoAccountResult.ExtID
-
-            # Get account from staging table
-            $sqlQueryGetSaltoStagingAccount = "SELECT $("[" + ($account.PSObject.Properties.Name -join "],[") + "]") FROM [dbo].[$($actionContext.Configuration.dbTableStaging)] WHERE [ExtUserId] = '$($account.ExtUserId)'"
-            Write-Verbose "Running query to get account in Salto Staging table: [$sqlQueryGetSaltoStagingAccount]"
-
-            $sqlQueryGetSaltoStagingAccountResult = [System.Collections.ArrayList]::new()
-            $sqlQueryGetSaltoStagingAccountSplatParams = @{
-                ConnectionString = $actionContext.Configuration.connectionStringStaging
-                SqlQuery         = $sqlQueryGetSaltoStagingAccount
-                ErrorAction      = 'Stop'
-            }
-
-            Invoke-SQLQuery @sqlQueryGetSaltoStagingAccountSplatParams -Data ([ref]$sqlQueryGetSaltoStagingAccountResult)
-
-            if ($null -eq $sqlQueryGetSaltoStagingAccountResult.ExtUserId) {
-                $action = 'CreateAccount'
-            }
-            else {
-                $action = 'CorrelateAccount'
-                $correlatedAccount = $sqlQueryGetSaltoStagingAccountResult
-            }
+    }
+    else {
+        if ($actionContext.Configuration.correlateOnly -eq $true) {
+            Write-Warning "Correlation is disabled while the option 'correlateOnly' is selected. Cannot continue."
         }
         else {
-            $account.ExtUserId = $correlationValue
-            $action = 'CreateAccount'
+            Write-Warning "Correlation is disabled."
         }
     }
+    #endregion Verify correlation configuration and properties
 
-    # Process
-    switch ($action) {
-        'CreateAccount' {
-            # Just dump $account to table, use insert
-            $sqlQueryInsertProperties = $("[" + ($account.PSObject.Properties.Name -join "],[") + "]")
-            $sqlQueryInsertValues = $("'" + ($account.PSObject.Properties.Value -join "','") + "'")
-            $sqlQueryAccountCreate = "INSERT INTO [dbo].[$($actionContext.Configuration.dbTableStaging)] ($sqlQueryInsertProperties) VALUES ($sqlQueryInsertValues)"
+    #region Get account from Salto DB
+    $actionMessage = "querying account where [$($correlationField)] = [$($correlationValue)] from Salto DB"
 
-            $sqlQueryAccountCreateResult = [System.Collections.ArrayList]::new()
-            $sqlQueryAccountCreateSplatParams = @{
-                ConnectionString = $actionContext.Configuration.connectionStringStaging
-                SqlQuery         = $sqlQueryAccountCreate
-                ErrorAction      = 'Stop'
-            }
+    $getSaltoAccountSplatParams = @{
+        ConnectionString = $actionContext.Configuration.connectionStringSalto
+        Username         = $actionContext.Configuration.username
+        Password         = $actionContext.Configuration.password
+        SqlQuery         = "
+        SELECT
+            tb_Users_Ext.ExtID
+        FROM
+            [dbo].[tb_Users]
+            INNER JOIN [dbo].[tb_Users_Ext] ON tb_Users.id_user = tb_Users_Ext.id_user
+        WHERE
+            [$correlationField] = '$correlationValue'
+        "
+        Verbose          = $false
+        ErrorAction      = "Stop"
+    }
 
-            # Make sure to test with special characters and if needed; add utf8 encoding.
-            if (-not($actionContext.DryRun -eq $true)) {
-                Write-Information 'Creating and correlating SaltoSpace account'
+    Write-Verbose "SQL Query: $($getSaltoAccountSplatParams.SqlQuery | Out-String)"
 
-                Invoke-SQLQuery @sqlQueryAccountCreateSplatParams -Data ([ref]$sqlQueryAccountCreateResult)
+    $getSaltoAccountResponse = [System.Collections.ArrayList]::new()
+    Invoke-SQLQuery @getSaltoAccountSplatParams -Data ([ref]$getSaltoAccountResponse)
+        
+    Write-Verbose "Queried account where [$($correlationField)] = [$($correlationValue)] from Salto DB. Result: $($getSaltoAccountResponse | ConvertTo-Json)"
+    #endregion Get account from Salto DB
 
-                $outputContext.Data = $account
-                $outputContext.AccountReference = $account.ExtUserId
+    if ($actionContext.Configuration.correlateOnly -eq $true -and ($getSaltoAccountResponse | Measure-Object).count -eq 0) {
+        throw "No account where [$($correlationField)] = [$($correlationValue)] found in Salto DB. The option 'correlateOnly' is selected. Cannot continue."
+    }
+
+    #region Get account from Salto Staging DB
+    $actionMessage = "querying account where [ExtId] = [$($getSaltoAccountResponse.ExtID)] from Salto Staging DB"
+
+    $getSaltoStagingAccountSplatParams = @{
+        ConnectionString = $actionContext.Configuration.connectionStringStaging
+        Username         = $actionContext.Configuration.username
+        Password         = $actionContext.Configuration.password
+        SqlQuery         = "
+        SELECT
+            [$($account.PSObject.Properties.Name -join '],[')]
+        FROM
+            [dbo].[$($actionContext.Configuration.dbTableStaging)]
+        WHERE
+            [ExtId] = '$($getSaltoAccountResponse.ExtID)'
+        "
+        Verbose          = $false
+        ErrorAction      = "Stop"
+    }
+
+    Write-Verbose "SQL Query: $($getSaltoStagingAccountSplatParams.SqlQuery | Out-String)"
+
+    $getSaltoStagingAccountResponse = [System.Collections.ArrayList]::new()
+    Invoke-SQLQuery @getSaltoStagingAccountSplatParams -Data ([ref]$getSaltoStagingAccountResponse)
+
+    Write-Verbose "Queried account where [ExtId] = [$($getSaltoAccountResponse.ExtID)] from Salto Staging DB. Result: $($getSaltoStagingAccountResponse | ConvertTo-Json)"
+    #endregion Get account from Salto Staging DB
+
+    $correlatedAccount = $getSaltoStagingAccountResponse
+    if (($correlatedAccount | Measure-Object).count -gt 0) {
+        $correlatedAccount = ConvertTo-FlatObject -Object $correlatedAccount
+    }
+    
+    #region Calulate action
+    $actionMessage = "calculating action"
+    if (($correlatedAccount | Measure-Object).count -eq 1 -and -not[string]::IsNullOrEmpty($correlatedAccount.ExtId)) {
+        $actionAccount = "Correlate"
+    }
+    elseif (($correlatedAccount | Measure-Object).count -eq 0 -or [string]::IsNullOrEmpty($correlatedAccount.ExtId)) {
+        $actionAccount = "Create"
+    }
+    elseif (($correlatedAccount | Measure-Object).count -gt 1) {
+        $actionAccount = "MultipleFound"
+    }
+    #endregion Calulate action
+
+    #region Process
+    switch ($actionAccount) {
+        "Create" {
+            #region Create account                  
+            $actionMessage = "creating account with FirstName [$($account.FirstName)] and LastName [$($account.FirstName)]"
+
+            # Set ExtId with ExtID of user in Salto DB, if not available, set with person externalId
+            if (-not [string]::IsNullOrEmpty($getSaltoAccountResponse.ExtID)) {
+                $account.ExtId = $getSaltoAccountResponse.ExtID
             }
             else {
-                Write-Information '[DryRun] Create and correlate SaltoSpace account, will be executed during enforcement'
-                Write-Information "Would run query [$sqlQueryAccountCreate]"
-                $outputContext.Data = $account
-                $outputContext.AccountReference = $account.ExtUserId
+                $account.ExtId = $personContext.Person.ExternalId
             }
-            $auditLogMessage = "Create account was successful. AccountReference is: [$($outputContext.AccountReference)]"
+            
+            $createAccountSplatParams = @{
+                ConnectionString = $actionContext.Configuration.connectionStringStaging
+                Username         = $actionContext.Configuration.username
+                Password         = $actionContext.Configuration.password
+                SqlQuery         = "
+                INSERT INTO
+                    [dbo].[$($actionContext.Configuration.dbTableStaging)] ([$($account.PSObject.Properties.Name -join "],[")],[ToBeProcessedBySalto])
+                VALUES
+                    ($($account.PSObject.Properties.Value.ForEach({ if ($_ -eq $null) { 'NULL' } else { '''' + $_.Replace("'", "''") + '''' } }) -join ', '),'1')
+                "
+                Verbose          = $false
+                ErrorAction      = "Stop"
+            }
+        
+            Write-Verbose "SQL Query: $($createAccountSplatParams.SqlQuery | Out-String)"
+
+            if (-Not($actionContext.DryRun -eq $true)) {
+                $createAccountResponse = [System.Collections.ArrayList]::new()
+                Invoke-SQLQuery @createAccountSplatParams -Data ([ref]$createAccountResponse)
+
+                # Set AccountReference and add AccountReference to Data
+                $outputContext.AccountReference = "$($account.ExtId)"
+                $outputContext.Data | Add-Member -MemberType NoteProperty -Name "ExtId" -Value "$($account.ExtId)" -Force
+
+                $outputContext.AuditLogs.Add([PSCustomObject]@{
+                        # Action  = "" # Optional
+                        Message = "Created account with FirstName [$($account.FirstName)] and LastName [$($account.FirstName)] with AccountReference: $($outputContext.AccountReference | ConvertTo-Json)."
+                        IsError = $false
+                    })
+            }
+            else {
+                Write-Warning "DryRun: Would create account with FirstName [$($account.FirstName)], LastName [$($account.FirstName)] and ExtId [$($account.ExtId)]."
+            }
+            #endregion Create account
+
             break
         }
 
-        'CorrelateAccount' {
-            Write-Information 'Correlating SaltoSpace account'
+        "Correlate" {
+            #region Correlate account
+            $actionMessage = "correlating to account"
 
-            $outputContext.Data = $correlatedAccount
-            $outputContext.AccountReference = $correlatedAccount.ExtUserId
+            # Set AccountReference and add AccountReference to Data
+            $outputContext.AccountReference = "$($correlatedAccount.ExtId)"
+            # $outputContext.Data = $correlatedAccount.PsObject.Copy() # Possible unnecessary
+            $outputContext.Data | Add-Member -MemberType NoteProperty -Name "ExtId" -Value "$($correlatedAccount.ExtId)" -Force
+
+            $outputContext.AuditLogs.Add([PSCustomObject]@{
+                    Action  = "CorrelateAccount" # Optionally specify a different action for this audit log
+                    Message = "Correlated to account with AccountReference: $($outputContext.AccountReference | ConvertTo-Json) on [$($correlationField)] = [$($correlationValue)]."
+                    IsError = $false
+                })
+
             $outputContext.AccountCorrelated = $true
-            $auditLogMessage = "Correlated account: [$($outputContext.AccountReference)] on field: [$($correlationField)] with value: [$($correlationValue)]"
+            #endregion Correlate account
+
+            break
+        }
+
+        "MultipleFound" {
+            #region Multiple accounts found
+            $actionMessage = "correlating to account"
+
+            # Throw terminal error
+            throw "Multiple accounts found where [$($correlationField)] = [$($correlationValue)]. Please ensure each person has a unique identifier."
+            #endregion Multiple accounts found
+
             break
         }
     }
-
-    $outputContext.success = $true
-    $outputContext.AuditLogs.Add([PSCustomObject]@{
-            Action  = $action
-            Message = $auditLogMessage
-            IsError = $false
-        })
+    #endregion Process
 }
 catch {
-    $outputContext.success = $false
     $ex = $PSItem
 
-    $auditMessage = "Could not create or correlate SaltoSpace account. Error: $($ex.Exception.Message)"
-    Write-Warning "Error at Line '$($ex.InvocationInfo.ScriptLineNumber)': $($ex.InvocationInfo.Line). Error: $($ex.Exception.Message)"
+    $auditMessage = "Error $($actionMessage). Error: $($ex.Exception.Message)"
+    $warningMessage = "Error at Line [$($ex.InvocationInfo.ScriptLineNumber)]: $($ex.InvocationInfo.Line). Error: $($ex.Exception.Message)"
+
+    Write-Warning $warningMessage
 
     $outputContext.AuditLogs.Add([PSCustomObject]@{
+            # Action= "" # Optional
             Message = $auditMessage
             IsError = $true
         })
+}
+finally {
+    # Check if auditLogs contains errors, if no errors are found, set success to true
+    if (-NOT($outputContext.AuditLogs.IsError -contains $true)) {
+        $outputContext.Success = $true
+    }
+
+    # Check if accountreference is set, if not set, set this with default value as this must contain a value
+    if ([String]::IsNullOrEmpty($outputContext.AccountReference) -and $actionContext.DryRun -eq $true) {
+        $outputContext.AccountReference = "DryRun: Currently not available"
+    }
 }

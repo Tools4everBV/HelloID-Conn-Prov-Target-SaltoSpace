@@ -3,18 +3,16 @@
 # PowerShell V2
 #################################################
 
-$actionContext.DryRun = $false
-
-$actionContext.References.Account = 'CE040D2C2EE640659D24B8F321A004CC'
+# Enable TLS1.2
+[System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor [System.Net.SecurityProtocolType]::Tls12
 
 # Set debug logging
-switch ($($actionContext.Configuration.isDebug)) {
+switch ($actionContext.Configuration.isDebug) {
     $true { $VerbosePreference = "Continue" }
     $false { $VerbosePreference = "SilentlyContinue" }
 }
-
-# Enable TLS1.2
-[System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor [System.Net.SecurityProtocolType]::Tls12
+$InformationPreference = "Continue"
+$WarningPreference = "Continue"
 
 #region functions
 function Invoke-SQLQuery {
@@ -39,10 +37,12 @@ function Invoke-SQLQuery {
 
         # Initialize connection and execute query
         if (-not[String]::IsNullOrEmpty($Username) -and -not[String]::IsNullOrEmpty($Password)) {
-
             # First create the PSCredential object
             $securePassword = ConvertTo-SecureString -String $Password -AsPlainText -Force
             $credential = [System.Management.Automation.PSCredential]::new($Username, $securePassword)
+
+            # Set the password as read only
+            $credential.Password.MakeReadOnly()
 
             # Create the SqlCredential object
             $sqlCredential = [System.Data.SqlClient.SqlCredential]::new($credential.username, $credential.password)
@@ -55,7 +55,7 @@ function Invoke-SQLQuery {
             $SqlConnection.Credential = $sqlCredential
         }
         $SqlConnection.Open()
-        Write-Verbose "Successfully connected to SQL database"
+        Write-Verbose "Successfully connected to SQL database" 
 
         # Set the query
         $SqlCmd = [System.Data.SqlClient.SqlCommand]::new()
@@ -91,139 +91,280 @@ function ConvertTo-FlatObject {
         [pscustomobject] $Object,
         [string] $Prefix = ""
     )
- 
     $result = [ordered]@{}
- 
+
     foreach ($property in $Object.PSObject.Properties) {
         $name = if ($Prefix) { "$Prefix`.$($property.Name)" } else { $property.Name }
- 
+
         if ($property.Value -is [pscustomobject]) {
             $flattenedSubObject = ConvertTo-FlatObject -Object $property.Value -Prefix $name
             foreach ($subProperty in $flattenedSubObject.PSObject.Properties) {
-                $result[$subProperty.Name] = [string]$subProperty.Value
+                # Convert boolean values of true and false to string values of 1 and 0
+                if ($subProperty.Value -eq $true) {
+                    $result[$subProperty.Name] = '1'
+                }
+                elseif ($subProperty.Value -eq $false) {
+                    $result[$subProperty.Name] = '0'
+                }
+                elseif ($null -eq $subProperty.Value -or $subProperty.Value -is [System.DBNull]) {
+                    $result[$subProperty.Name] = $null
+                }
+                else {
+                    $result[$subProperty.Name] = [string]$subProperty.Value
+                }
             }
         }
         else {
-            $result[$name] = [string]$property.Value
+            # Convert boolean values of true and false to string values of 1 and 0
+            if ($property.Value -eq $true) {
+                $result[$name] = '1'
+            }
+            elseif ($property.Value -eq $false) {
+                $result[$name] = '0'
+            }
+            elseif ($null -eq $property.Value -or $property.Value -is [System.DBNull]) {
+                $result[$name] = $null
+            }
+            else {
+                $result[$name] = [string]$property.Value
+            }
         }
     }
-    [PSCustomObject]$result
+    Write-Output ([PSCustomObject]$result)
 }
 #endregion
 
 try {
-    # Verify if [aRef] has a value
+    #region account
+    # Define correlation
+    $correlationField = "ExtId"
+    $correlationValue = $actionContext.References.Account
+
+    # Define account object
+    $account = [PSCustomObject]$actionContext.Data.PsObject.Copy()
+    $account = ConvertTo-FlatObject -Object $account
+
+    # Define properties to compare for update
+    $accountPropertiesToCompare = $account.PsObject.Properties.Name | Select-Object -ExcludeProperty 'Action', 'ToBeProcessedBySalto'
+    #endRegion account
+
+    #region Verify account reference
+    $actionMessage = "verifying account reference"
+    
     if ([string]::IsNullOrEmpty($($actionContext.References.Account))) {
-        throw 'The account reference could not be found'
+        throw "The account reference could not be found"
     }
+    #endregion Verify account reference
 
-    Write-Verbose 'Verifying if a SaltoSpace account exists'
+    #region Get account from Salto Staging DB
+    $actionMessage = "querying account where [$correlationField] = [$correlationValue] from Salto Staging DB"
 
-    # Get account from staging table
-    $account = ConvertTo-FlatObject -Object $outputContext.Data
-    $sqlQueryGetAccount = "SELECT $("[" + ($account.PSObject.Properties.Name -join "],[") + "]") FROM [dbo].[$($actionContext.Configuration.dbTableStaging)] WHERE [ExtUserId] = '$($actionContext.References.Account)'"
-    Write-Verbose "Running query to get account in Salto Staging table: [$sqlQueryGetAccount]"
-
-    $sqlQueryGetAccountResult = [System.Collections.ArrayList]::new()
-    $sqlQueryGetAccountSplatParams = @{
+    $getSaltoStagingAccountSplatParams = @{
         ConnectionString = $actionContext.Configuration.connectionStringStaging
-        SqlQuery         = $sqlQueryGetAccount
-        ErrorAction      = 'Stop'
+        Username         = $actionContext.Configuration.username
+        Password         = $actionContext.Configuration.password
+        SqlQuery         = "
+        SELECT
+            [$($account.PSObject.Properties.Name -join "],[")]
+        FROM
+            [dbo].[$($actionContext.Configuration.dbTableStaging)]
+        WHERE
+            [$correlationField] = '$correlationValue'
+        "
+        Verbose          = $false
+        ErrorAction      = "Stop"
     }
 
-    Invoke-SQLQuery @sqlQueryGetAccountSplatParams -Data ([ref]$sqlQueryGetAccountResult)
+    Write-Verbose "SQL Query: $($getSaltoStagingAccountSplatParams.SqlQuery | Out-String)"
 
-    $correlatedAccount = ConvertTo-FlatObject -Object $sqlQueryGetAccountResult
+    $getSaltoStagingAccountResponse = [System.Collections.ArrayList]::new()
+    Invoke-SQLQuery @getSaltoStagingAccountSplatParams -Data ([ref]$getSaltoStagingAccountResponse)
 
-    $outputContext.PreviousData = $correlatedAccount
+    Write-Verbose "Queried account where [$correlationField] = [$correlationValue] from Salto Staging DB. Result: $($correlatedAccount | ConvertTo-Json)"
+    #endregion Get account from Salto Staging DB
 
-    
-    
-    # DATE COMPARE MUST STILL BE FIXED
-
-    # Always compare the account against the current account in target system
-    if ($null -ne $correlatedAccount) {
-        $splatCompareProperties = @{
-            ReferenceObject  = @($correlatedAccount.PSObject.Properties)
-            DifferenceObject = @($account.PSObject.Properties)
-        }
-
-        # Action and ToBeProcessedBySalto should not be compared
-        $propertiesChanged = Compare-Object @splatCompareProperties -PassThru | Where-Object { $_.SideIndicator -eq '=>' -and $_.Name -ne 'Action' -and $_.Name -ne 'ToBeProcessedBySalto'}
-
-        if ($propertiesChanged) {
-            $action = 'UpdateAccount'
-        } else {
-            $action = 'NoChanges'
-        }
-    } else {
-        $action = 'NotFound'
+    $correlatedAccount = $getSaltoStagingAccountResponse
+    if (($correlatedAccount | Measure-Object).count -gt 0) {
+        $correlatedAccount = ConvertTo-FlatObject -Object $correlatedAccount
     }
+    
+    #region Calulate action
+    $actionMessage = "calculating action"
+    if (($correlatedAccount | Measure-Object).count -eq 1) {
+        $actionMessage = "comparing current account to mapped properties"
 
-    # Process
-    switch ($action) {
-        'UpdateAccount' {
-            Write-Information "Account property(s) required to update: $($propertiesChanged.Name -join ', ')"
-            $sqlQueryUpdateAccount = "UPDATE [dbo].[$($actionContext.Configuration.dbTableStaging)] SET"
-            foreach ($property in $propertiesChanged) {
-                $sqlQueryUpdateAccountPart = "$sqlQueryUpdateAccountPart [$($property.Name)] = '$($property.Value)', "
+        # Set Previous data (if there are no changes between PreviousData and Data, HelloID will log "update finished with no changes")
+        $outputContext.PreviousData = $correlatedAccount.PsObject.Copy()
+
+        # Create reference object from correlated account
+        $accountReferenceObject = $correlatedAccount.PsObject.Copy()
+
+        # Create difference object from mapped properties
+        $accountDifferenceObject = $account.PsObject.Copy()
+
+        $accountSplatCompareProperties = @{
+            ReferenceObject  = $accountReferenceObject.PSObject.Properties | Where-Object { $_.Name -in $accountPropertiesToCompare }
+            DifferenceObject = $accountDifferenceObject.PSObject.Properties | Where-Object { $_.Name -in $accountPropertiesToCompare }
+        }
+
+        if ($null -ne $accountSplatCompareProperties.ReferenceObject -and $null -ne $accountSplatCompareProperties.DifferenceObject) {
+            $accountPropertiesChanged = Compare-Object @accountSplatCompareProperties -PassThru
+            $accountOldProperties = $accountPropertiesChanged | Where-Object { $_.SideIndicator -eq "<=" }
+            $accountNewProperties = $accountPropertiesChanged | Where-Object { $_.SideIndicator -eq "=>" }
+        }
+
+        if ($accountNewProperties) {
+            # Create custom object with old and new values
+            $accountChangedPropertiesObject = [PSCustomObject]@{
+                OldValues = @{}
+                NewValues = @{}
             }
-            $sqlQueryUpdateAccount = "$sqlQueryUpdateAccount $sqlQueryUpdateAccountPart [Action] = $($actionContext.data.Action), [ToBeProcessedBySalto] = $($actionContext.data.ToBeProcessedBySalto) WHERE [ExtUserId] = '$($actionContext.References.Account)'"
-            Write-Verbose "Running query to update account in Salto Staging table: [$sqlQueryUpdateAccount]"
 
-            # Make sure to test with special characters and if needed; add utf8 encoding. # Special chars tested (Rick)
-            if (-not($actionContext.DryRun -eq $true)) {
-                Write-Information "Updating SaltoSpace account with accountReference: [$($actionContext.References.Account)]"
+            # Add the old properties to the custom object with old and new values
+            foreach ($accountOldProperty in $accountOldProperties) {
+                $accountChangedPropertiesObject.OldValues.$($accountOldProperty.Name) = $accountOldProperty.Value
+            }
 
-                $sqlQueryUpdateAccountResult = [System.Collections.ArrayList]::new()
-                $sqlQueryUpdateAccountSplatParams = @{
-                    ConnectionString = $actionContext.Configuration.connectionStringStaging
-                    SqlQuery         = $sqlQueryUpdateAccount
-                    ErrorAction      = 'Stop'
+            # Add the new properties to the custom object with old and new values
+            foreach ($accountNewProperty in $accountNewProperties) {
+                $accountChangedPropertiesObject.NewValues.$($accountNewProperty.Name) = $accountNewProperty.Value
+            }
+
+            Write-Verbose "Changed properties: $($accountChangedPropertiesObject | ConvertTo-Json)"
+
+            $actionAccount = "Update"
+        }
+        else {
+            $actionAccount = "NoChanges"
+        }            
+
+        Write-Verbose "Compared current account to mapped properties. Result: $actionAccount"
+    }
+    elseif (($correlatedAccount | Measure-Object).count -eq 0) {
+        $actionAccount = "NotFound"
+    }
+    elseif (($correlatedAccount | Measure-Object).count -gt 1) {
+        $actionAccount = "MultipleFound"
+    }
+    #endregion Calulate action
+
+    #region Process
+    switch ($actionAccount) {
+        "Update" {
+            #region Update account             
+            $actionMessage = "updating account with AccountReference: $($actionContext.References.Account | ConvertTo-Json)"
+
+            # Create a list of properties to update
+            $updatePropertiesList = [System.Collections.Generic.List[string]]::new()
+
+            foreach ($accountNewProperty in $accountNewProperties) {
+                # Define the value, handling nulls and escaping single quotes
+                $value = if ($accountNewProperty.Value -eq $null) {
+                    'NULL'
                 }
-                Invoke-SQLQuery @sqlQueryUpdateAccountSplatParams -Data ([ref]$sqlQueryUpdateAccountResult)
-            } else {
-                Write-Information "[DryRun] Update SaltoSpace account with accountReference: [$($actionContext.References.Account)], will be executed during enforcement"
+                else {
+                    "'$($accountNewProperty.Value -replace "'", "''")'"
+                }
+                
+                # Add the property to the list
+                $updatePropertiesList.Add("[$($accountNewProperty.Name)] = $value")
             }
+            
+            $updateAccountSplatParams = @{
+                ConnectionString = $actionContext.Configuration.connectionStringStaging
+                Username         = $actionContext.Configuration.username
+                Password         = $actionContext.Configuration.password
+                SqlQuery         = "
+                UPDATE
+                    [dbo].[$($actionContext.Configuration.dbTableStaging)]
+                SET
+                    $($updatePropertiesList -join ','),
+                    [Action] = '$($actionContext.data.Action)',
+                    [ToBeProcessedBySalto] = '1'
+                WHERE
+                    [ExtId] = '$($actionContext.References.Account)'
+                "
+                Verbose          = $false
+                ErrorAction      = "Stop"
+            }
+        
+            Write-Verbose "SQL Query: $($updateAccountSplatParams.SqlQuery | Out-String)"
 
-            $outputContext.Success = $true
-            $outputContext.AuditLogs.Add([PSCustomObject]@{
-                    Message = "Update account was successful, Account property(s) updated: [$($propertiesChanged.name -join ',')]"
-                    IsError = $false
-                })
+            if (-Not($actionContext.DryRun -eq $true)) {
+                $updateAccountResponse = [System.Collections.ArrayList]::new()
+                Invoke-SQLQuery @updateAccountSplatParams -Data ([ref]$updateAccountResponse)
+
+                $outputContext.AuditLogs.Add([PSCustomObject]@{
+                        # Action  = "" # Optional
+                        Message = "Updated account with AccountReference: $($outputContext.AccountReference | ConvertTo-Json). Old values: $($accountChangedPropertiesObject.oldValues | ConvertTo-Json). New values: $($accountChangedPropertiesObject.newValues | ConvertTo-Json)."
+                        IsError = $false
+                    })
+            }
+            else {
+                Write-Warning "DryRun: Would update account with AccountReference: $($outputContext.AccountReference | ConvertTo-Json). Old values: $($accountChangedPropertiesObject.oldValues | ConvertTo-Json). New values: $($accountChangedPropertiesObject.newValues | ConvertTo-Json)."
+            }
+            #endregion Update account
+
             break
         }
 
-        'NoChanges' {
-            Write-Information "No changes to SaltoSpace account with accountReference: [$($actionContext.References.Account)]"
+        "NoChanges" {
+            #region No changes
+            $actionMessage = "skipping updating account"
 
-            $outputContext.Success = $true
+            $outputContext.Data = $correlatedAccount.PsObject.Copy()
+
             $outputContext.AuditLogs.Add([PSCustomObject]@{
-                    Message = 'No changes will be made to the account during enforcement'
+                    # Action  = "" # Optional
+                    Message = "Skipped updating account with AccountReference: $($actionContext.References.Account | ConvertTo-Json). Reason: No changes."
                     IsError = $false
                 })
+            #endregion No changes
+
             break
         }
 
-        'NotFound' {
-            Write-Information "SaltoSpace account: [$($actionContext.References.Account)] could not be found, possibly indicating that it could be deleted"
-            $outputContext.Success = $false
-            $outputContext.AuditLogs.Add([PSCustomObject]@{
-                    Message = "SaltoSpace account with accountReference: [$($actionContext.References.Account)] could not be found, possibly indicating that it could be deleted"
-                    IsError = $true
-                })
+        "NotFound" {
+            #region No account found
+            $actionMessage = "updating account"
+
+            # Throw terminal error
+            throw "No account found where [$($correlationField)] = [$($correlationValue)]."
+            #endregion No account found
+
+            break
+        }
+
+        "MultipleFound" {
+            #region Multiple accounts found
+            $actionMessage = "updating account"
+
+            # Throw terminal error
+            throw "Multiple accounts found where [$($correlationField)] = [$($correlationValue)]. Please correct this to ensure the correlation results in a single unique account."
+            #endregion Multiple accounts found
+
             break
         }
     }
-} catch {
-    $outputContext.success = $false
+    #endregion Process
+}
+catch {
     $ex = $PSItem
 
-    $auditMessage = "Could not update SaltoSpace account. Error: $($ex.Exception.Message)"
-    Write-Warning "Error at Line '$($ex.InvocationInfo.ScriptLineNumber)': $($ex.InvocationInfo.Line). Error: $($ex.Exception.Message)"
+    $auditMessage = "Error $($actionMessage). Error: $($ex.Exception.Message)"
+    $warningMessage = "Error at Line [$($ex.InvocationInfo.ScriptLineNumber)]: $($ex.InvocationInfo.Line). Error: $($ex.Exception.Message)"
+
+    Write-Warning $warningMessage
 
     $outputContext.AuditLogs.Add([PSCustomObject]@{
+            # Action = "" # Optional
             Message = $auditMessage
             IsError = $true
         })
+}
+finally {
+    # Check if auditLogs contains errors, if no errors are found, set success to true
+    if (-NOT($outputContext.AuditLogs.IsError -contains $true)) {
+        $outputContext.Success = $true
+    }
 }
