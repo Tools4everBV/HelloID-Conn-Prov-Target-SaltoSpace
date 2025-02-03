@@ -1,0 +1,68 @@
+[
+    {
+        "key": "connectionStringSalto",
+        "type": "input",
+        "defaultValue": "",
+        "templateOptions": {
+            "label": "Salto Database Connection string",
+            "placeholder": "Server=server\\instance;Database=Salto_RW;Trusted_Connection=True;",
+            "description": "The connection string used to connect to the Salto SQL database.",
+            "required": true
+        }
+    },
+    {
+        "key": "connectionStringStaging",
+        "type": "input",
+        "defaultValue": "",
+        "templateOptions": {
+            "label": "Salto Staging Database Connection string",
+            "placeholder": "Server=server\\instance;Database=Salto_STAGING;Trusted_Connection=True;",
+            "description": "The connection string used to connect to the Salto Staging SQL database.",
+            "required": true
+        }
+    },
+    {
+        "key": "DbTableStaging",
+        "type": "input",
+        "defaultValue": "",
+        "templateOptions": {
+            "label": "Salto staging table name",
+            "placeholder": "SaltoCardholdersSQLServer",
+            "description": "The name of the Salto staging table.",
+            "required": true
+        }
+    },
+    {
+        "key": "username",
+        "type": "input",
+        "defaultValue": "",
+        "templateOptions": {
+            "label": "Username",
+            "placeholder": "sa_helloid",
+            "description": "Optional: The username of the SQL user to use in the connection string.",
+            "required": false
+        }
+    },
+    {
+        "key": "password",
+        "type": "input",
+        "defaultValue": "",
+        "templateOptions": {
+            "label": "Password",
+            "type": "password",
+            "placeholder": "P@ssw0rd1!",
+            "description": "Optional: The username of the SQL user to use in the connection string.",
+            "required": false
+        }
+    },
+    {
+        "key": "isDebug",
+        "type": "checkbox",
+        "defaultValue": false,
+        "templateOptions": {
+            "label": "Toggle debug logging",
+            "description": "When toggled, debug logging will be displayed.",
+            "required": false
+        }
+    }
+]
