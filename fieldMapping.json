@@ -219,7 +219,7 @@
                         "Update"
                     ],
                     "MappingMode": "Field",
-                    "Value": "\"Person.Custom.Actuele06\"",
+                    "Value": "\"Person.Contact.Business.Phone.Fixed\"",
                     "UsedInNotifications": false,
                     "StoreInAccountData": true
                 }
