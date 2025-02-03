@@ -1,5 +1,11 @@
 # HelloID-Conn-Prov-Target-SaltoSpace
 
+> [!WARNING] Field Name Changes 
+> The field names in the SaltoSpace connector have been updated. Fields previously named `GPF1`, `GPF2`, etc., are now named `Dummy1`, `Dummy2`, etc.  
+> **Why?** The original `GPF` fields were renamed to match their actual system (database) names. Keeping the database field names identical in the staging table reduces the need for additional mapping in scripts.  
+> This change does not affect Salto, as database fields must still be manually selected and mapped. However, please note that this update **breaks backward compatibility**. Upgrading to the latest version requires creating a new database table and reconfiguring the Salto Staging Schedule.  
+
+
 > [!WARNING]
 > This script is for the new powershell connector. Make sure to use the mapping and correlation keys like mentioned in this readme. For more information, please read our [documentation](https://docs.helloid.com/en/provisioning/target-systems/powershell-v2-target-systems.html)
 
@@ -79,7 +85,7 @@
 
 ## Introduction
 
-_HelloID-Conn-Prov-Target-SaltoSpace_ is a target connector that uses KPN's REST APIs to interact with data. Below is a list of API endpoints used in the connector.
+_HelloID-Conn-Prov-Target-SaltoSpace_ is a target connector that uses a staging database and a schedule in Salto Salto's REST APIs to interact with data. Below is a list of the actions provided by the connector.
 
 ### Actions
 
