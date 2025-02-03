@@ -1,6 +1,6 @@
 # HelloID-Conn-Prov-Target-SaltoSpace
 
-> [!WARNING] Field Name Changes 
+> [!WARNING]
 > The field names in the SaltoSpace connector have been updated. Fields previously named `GPF1`, `GPF2`, etc., are now named `Dummy1`, `Dummy2`, etc.  
 > **Why?** The original `GPF` fields were renamed to match their actual system (database) names. Keeping the database field names identical in the staging table reduces the need for additional mapping in scripts.  
 > This change does not affect Salto, as database fields must still be manually selected and mapped. However, please note that this update **breaks backward compatibility**. Upgrading to the latest version requires creating a new database table and reconfiguring the Salto Staging Schedule.  
