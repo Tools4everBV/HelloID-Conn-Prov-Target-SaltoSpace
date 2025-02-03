@@ -158,7 +158,7 @@ try {
     }
     else {
         if ($actionContext.Configuration.correlateOnly -eq $true) {
-            Write-Warning "Correlation is disabled while the option 'correlateOnly' is selected. Cannot continue."
+            throw "Correlation is disabled while the option 'correlateOnly' is selected. Cannot continue."
         }
         else {
             Write-Warning "Correlation is disabled."
