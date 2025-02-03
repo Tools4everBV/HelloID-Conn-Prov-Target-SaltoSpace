@@ -85,54 +85,6 @@ function Invoke-SQLQuery {
         Write-Verbose "Successfully disconnected from SQL database"
     }
 }
-
-function ConvertTo-FlatObject {
-    param (
-        [Parameter(Mandatory = $true)]
-        [pscustomobject] $Object,
-        [string] $Prefix = ""
-    )
-    $result = [ordered]@{}
-
-    foreach ($property in $Object.PSObject.Properties) {
-        $name = if ($Prefix) { "$Prefix`.$($property.Name)" } else { $property.Name }
-
-        if ($property.Value -is [pscustomobject]) {
-            $flattenedSubObject = ConvertTo-FlatObject -Object $property.Value -Prefix $name
-            foreach ($subProperty in $flattenedSubObject.PSObject.Properties) {
-                # Convert boolean values of true and false to string values of 1 and 0
-                if ($subProperty.Value -eq $true) {
-                    $result[$subProperty.Name] = '1'
-                }
-                elseif ($subProperty.Value -eq $false) {
-                    $result[$subProperty.Name] = '0'
-                }
-                elseif ($null -eq $subProperty.Value -or $subProperty.Value -is [System.DBNull]) {
-                    $result[$subProperty.Name] = $null
-                }
-                else {
-                    $result[$subProperty.Name] = [string]$subProperty.Value
-                }
-            }
-        }
-        else {
-            # Convert boolean values of true and false to string values of 1 and 0
-            if ($property.Value -eq $true) {
-                $result[$name] = '1'
-            }
-            elseif ($property.Value -eq $false) {
-                $result[$name] = '0'
-            }
-            elseif ($null -eq $property.Value -or $property.Value -is [System.DBNull]) {
-                $result[$name] = $null
-            }
-            else {
-                $result[$name] = [string]$property.Value
-            }
-        }
-    }
-    Write-Output ([PSCustomObject]$result)
-}
 #endregion
 
 try {
