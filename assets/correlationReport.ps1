@@ -9,8 +9,8 @@ $saltoUserName = ""
 $saltoPassword = ""
 
 # Attributes used for correlating persons and accounts
-$personCorrelationField = "Custom.Actuele06" # e.g., "externalId"
-$accountCorrelationField = "PhoneNumber"
+$personCorrelationField = "ExternalId" # e.g., "externalId"
+$accountCorrelationField = "Dummy2"
 
 # Path configuration for export files
 # Ensure the exportPath ends with a trailing \ in Windows or / in Unix/MacOS environments
