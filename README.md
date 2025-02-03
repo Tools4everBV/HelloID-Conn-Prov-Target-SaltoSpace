@@ -39,7 +39,7 @@
 
 1. **Salto Staging Database**:
    - **Create a New SQL Database**: Set up a new SQL database for staging data, ideally named `Salto_STAGING`.
-   - **Create the Staging Table**: Use the provided SQL script (`createStagingDB.sql`) to create the necessary table in the staging database.
+   - **Create the Staging Table**: Use the provided SQL script ([createStagingDBTable.sql](/assets/createStagingDBTable.sql)) to create the necessary table in the staging database.
    - **Configure Access**: Ensure both read and write access are set up for the staging database.
      - It’s recommended to use the HelloID service account with Windows authentication for enhanced security.
      - If Windows authentication isn’t available, an SQL-only user can be used, though this option offers less security.
@@ -83,14 +83,19 @@ _HelloID-Conn-Prov-Target-SaltoSpace_ is a target connector that uses KPN's REST
 
 ### Actions
 
-| Action                 | Description                                          | Comment                                        |
-| ---------------------- | ---------------------------------------------------- | ---------------------------------------------- |
-| `create.ps1`           | Create (or update) and correlate a user account      |                                                |
-| `update.ps1`           | Update a user account                                |                                                |
-| `delete.ps1`           | Delete a user account                                | Be cautious; deleted users cannot be restored. |
-| `permissions.ps1`      | Retrieve all groups and provide them as entitlements |                                                |
-| `grantPermission.ps1`  | Add a group to a user account                        |                                                |
-| `revokePermission.ps1` | Remove a group from a user account                   |                                                |
+| Action                                                                                          | Description                                                                                            | Comment                                        |
+| ----------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ | ---------------------------------------------- |
+| [create.ps1](create.ps1)                                                                        | Create (or update) and correlate a user account                                                        |                                                |
+| [update.ps1](update.ps1)                                                                        | Update a user account                                                                                  |                                                |
+| [delete.ps1](delete.ps1)                                                                        | Delete a user account                                                                                  | Be cautious; deleted users cannot be restored. |
+| [permissions/accessGroups/permissions.ps1](/permissions/accessGroups/permissions.ps1)           | Retrieve all groups and provide them as entitlements                                                   |                                                |
+| [permissions/accessGroups/grantPermission.ps1](/permissions/accessGroups/grantPermission.ps1)   | Add a group to a user account                                                                          |                                                |
+| [permissions/accessGroups/revokePermission.ps1](/permissions/accessGroups/revokePermission.ps1) | Remove a group from a user account                                                                     |                                                |
+| [permissions/accessGroups/revokePermission.ps1](/permissions/accessGroups/revokePermission.ps1) | Remove a group from a user account                                                                     |                                                |
+| [assets/reports.sql](/assets/reports.sql)                                                       | SQL script to retrieve all group memberships in Salto Space and show which are not managed by HelloID. |                                                |
+| [assets/createStagingDBTable.SQL](/assets/createStagingDBTable.SQL)                             | SQL script to create the staging database table.                                                       |                                                |
+| [assets/correlationReport.ps1](/assets/correlationReport.ps1)                                   | Powershell script to generate a correlation report.                                                    |                                                |
+| [fieldMapping.json](fieldMapping.json)                                                          | Default fieldMapping.json                                                                              |                                                |
 
 
 ## Getting Started
@@ -139,6 +144,8 @@ To properly set up the correlation:
     | ----------------------------- | ------------ |
     | **Person Correlation Field**  | `ExternalId` |
     | **Account Correlation Field** | `Dummy2`     |
+> [!IMPORTANT]
+> The **Account Correlation Field** (`Dummy2`) is just an example. Make sure to change this accordingly.
 
 > [!TIP]
 > _For more information on correlation, please refer to our correlation [documentation](https://docs.helloid.com/en/provisioning/target-systems/powershell-v2-target-systems/correlation.html) pages_.
