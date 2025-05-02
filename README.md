@@ -138,7 +138,7 @@ If you have any questions on this, please contact your Salto representative.
 ### Provisioning PowerShell V2 connector
 
 #### Correlation Configuration
-The correlation configuration specifies which properties are used to match accounts in KPN Lia with users in HelloID.
+The correlation configuration specifies which properties are used to match accounts in Salto with users in HelloID.
 
 To properly set up the correlation:
 
