@@ -247,7 +247,7 @@ try {
     switch ($actionAccount) {
         "Create" {
             #region Create account                  
-            $actionMessage = "creating account with FirstName [$($account.FirstName)] and LastName [$($account.FirstName)]"
+            $actionMessage = "creating account with FirstName [$($account.FirstName)] and LastName [$($account.LastName)]"
 
             # Set ExtId with ExtID of user in Salto DB, if not available, set with person externalId
             if (-not [string]::IsNullOrEmpty($getSaltoAccountResponse.ExtID)) {
@@ -283,12 +283,12 @@ try {
 
                 $outputContext.AuditLogs.Add([PSCustomObject]@{
                         # Action  = "" # Optional
-                        Message = "Created account with FirstName [$($account.FirstName)] and LastName [$($account.FirstName)] with AccountReference: $($outputContext.AccountReference | ConvertTo-Json)."
+                        Message = "Created account with FirstName [$($account.FirstName)] and LastName [$($account.LastName)] with AccountReference: $($outputContext.AccountReference | ConvertTo-Json)."
                         IsError = $false
                     })
             }
             else {
-                Write-Warning "DryRun: Would create account with FirstName [$($account.FirstName)], LastName [$($account.FirstName)] and ExtId [$($account.ExtId)]."
+                Write-Warning "DryRun: Would create account with FirstName [$($account.FirstName)], LastName [$($account.LastName)] and ExtId [$($account.ExtId)]."
             }
             #endregion Create account
 
