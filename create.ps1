@@ -142,6 +142,7 @@ try {
 
     # Define account object
     $account = [PSCustomObject]$actionContext.Data.PsObject.Copy()
+    $account = ConvertTo-FlatObject -Object $account
     #endRegion account
 
     #region Verify correlation configuration and properties
@@ -235,6 +236,10 @@ try {
     if (($correlatedAccount | Measure-Object).count -eq 1 -and -not[string]::IsNullOrEmpty($correlatedAccount.ExtId)) {
         $actionAccount = "Correlate"
     }
+    
+    elseif ($getSaltoAccountResponse.ExtID.count -gt 1) {
+        $actionAccount = "MultipleFound"
+    }
     elseif (($correlatedAccount | Measure-Object).count -eq 0 -or [string]::IsNullOrEmpty($correlatedAccount.ExtId)) {
         $actionAccount = "Create"
     }
@@ -304,6 +309,7 @@ try {
             # $outputContext.Data = $correlatedAccount.PsObject.Copy() # Possible unnecessary
             $outputContext.Data | Add-Member -MemberType NoteProperty -Name "ExtId" -Value "$($correlatedAccount.ExtId)" -Force
 
+           
             $outputContext.AuditLogs.Add([PSCustomObject]@{
                     Action  = "CorrelateAccount" # Optionally specify a different action for this audit log
                     Message = "Correlated to account with AccountReference: $($outputContext.AccountReference | ConvertTo-Json) on [$($correlationField)] = [$($correlationValue)]."
