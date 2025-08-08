@@ -6,14 +6,6 @@
 # Enable TLS1.2
 [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor [System.Net.SecurityProtocolType]::Tls12
 
-# Set debug logging
-switch ($actionContext.Configuration.isDebug) {
-    $true { $VerbosePreference = "Continue" }
-    $false { $VerbosePreference = "SilentlyContinue" }
-}
-$InformationPreference = "Continue"
-$WarningPreference = "Continue"
-
 #region functions
 function Invoke-SQLQuery {
     param(
@@ -55,7 +47,7 @@ function Invoke-SQLQuery {
             $SqlConnection.Credential = $sqlCredential
         }
         $SqlConnection.Open()
-        Write-Verbose "Successfully connected to SQL database" 
+        Write-Information "Successfully connected to SQL database" 
 
         # Set the query
         $SqlCmd = [System.Data.SqlClient.SqlCommand]::new()
@@ -81,7 +73,7 @@ function Invoke-SQLQuery {
         if ($SqlConnection.State -eq "Open") {
             $SqlConnection.close()
         }
-        Write-Verbose "Successfully disconnected from SQL database"
+        Write-Information "Successfully disconnected from SQL database"
     }
 }
 
@@ -172,12 +164,12 @@ try {
         ErrorAction      = "Stop"
     }
 
-    Write-Verbose "SQL Query: $($getSaltoStagingAccountSplatParams.SqlQuery | Out-String)"
+    Write-Information "SQL Query: $($getSaltoStagingAccountSplatParams.SqlQuery | Out-String)"
     
     $getSaltoStagingAccountResponse = [System.Collections.ArrayList]::new()
     Invoke-SQLQuery @getSaltoStagingAccountSplatParams -Data ([ref]$getSaltoStagingAccountResponse)
 
-    Write-Verbose "Queried account where [$correlationField] = [$correlationValue] from Salto Staging DB. Result: $($correlatedAccount | ConvertTo-Json)"
+    Write-Information "Queried account where [$correlationField] = [$correlationValue] from Salto Staging DB. Result: $($correlatedAccount | ConvertTo-Json)"
     #endregion Get account from Salto Staging DB
 
     $correlatedAccount = $getSaltoStagingAccountResponse
@@ -219,7 +211,7 @@ try {
                 ErrorAction      = "Stop"
             }
         
-            Write-Verbose "SQL Query: $($deleteAccountSplatParams.SqlQuery | Out-String)"
+            Write-Information "SQL Query: $($deleteAccountSplatParams.SqlQuery | Out-String)"
 
             if (-Not($actionContext.DryRun -eq $true)) {
                 $deleteAccountResponse = [System.Collections.ArrayList]::new()

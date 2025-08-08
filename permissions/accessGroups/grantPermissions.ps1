@@ -7,14 +7,6 @@
 # Enable TLS1.2
 [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor [System.Net.SecurityProtocolType]::Tls12
 
-# Set debug logging
-switch ($actionContext.Configuration.isDebug) {
-    $true { $VerbosePreference = "Continue" }
-    $false { $VerbosePreference = "SilentlyContinue" }
-}
-$InformationPreference = "Continue"
-$WarningPreference = "Continue"
-
 #region functions
 function Invoke-SQLQuery {
     param(
@@ -56,7 +48,7 @@ function Invoke-SQLQuery {
             $SqlConnection.Credential = $sqlCredential
         }
         $SqlConnection.Open()
-        Write-Verbose "Successfully connected to SQL database" 
+        Write-Information "Successfully connected to SQL database" 
 
         # Set the query
         $SqlCmd = [System.Data.SqlClient.SqlCommand]::new()
@@ -82,7 +74,7 @@ function Invoke-SQLQuery {
         if ($SqlConnection.State -eq "Open") {
             $SqlConnection.close()
         }
-        Write-Verbose "Successfully disconnected from SQL database"
+        Write-Information "Successfully disconnected from SQL database"
     }
 }
 #endregion
@@ -115,13 +107,13 @@ try {
         ErrorAction      = "Stop"
     }
 
-    Write-Verbose "SQL Query: $($getSaltoUserCurrentGroupsSplatParams.SqlQuery | Out-String)"
+    Write-Information "SQL Query: $($getSaltoUserCurrentGroupsSplatParams.SqlQuery | Out-String)"
 
     $getSaltoUserCurrentGroupsResponse = [System.Collections.ArrayList]::new()
     Invoke-SQLQuery @getSaltoUserCurrentGroupsSplatParams -Data ([ref]$getSaltoUserCurrentGroupsResponse)
     $saltoUserCurrentGroups = $getSaltoUserCurrentGroupsResponse
 
-    Write-Verbose "Queried current groups for account with ExtId [$($actionContext.References.Account | ConvertTo-Json)]. Result: $($saltoUserCurrentGroups | ConvertTo-Json)"
+    Write-Information "Queried current groups for account with ExtId [$($actionContext.References.Account | ConvertTo-Json)]. Result: $($saltoUserCurrentGroups | ConvertTo-Json)"
     #endregion Get Current Groups of account
 
     if ($saltoUserCurrentGroups -like "*$($actionContext.References.Permission.ExtID)*") {
@@ -148,7 +140,7 @@ try {
             ErrorAction      = "Stop"
         }
             
-        Write-Verbose "SQL Query: $($grantPermissionSplatParams.SqlQuery | Out-String)"
+        Write-Information "SQL Query: $($grantPermissionSplatParams.SqlQuery | Out-String)"
         
         if (-Not($actionContext.DryRun -eq $true)) {
             $grantPermissionResponse = [System.Collections.ArrayList]::new()

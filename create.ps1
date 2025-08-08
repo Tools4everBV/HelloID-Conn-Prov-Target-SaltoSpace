@@ -6,14 +6,6 @@
 # Enable TLS1.2
 [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor [System.Net.SecurityProtocolType]::Tls12
 
-# Set debug logging
-switch ($actionContext.Configuration.isDebug) {
-    $true { $VerbosePreference = "Continue" }
-    $false { $VerbosePreference = "SilentlyContinue" }
-}
-$InformationPreference = "Continue"
-$WarningPreference = "Continue"
-
 #region functions
 function Invoke-SQLQuery {
     param(
@@ -55,7 +47,7 @@ function Invoke-SQLQuery {
             $SqlConnection.Credential = $sqlCredential
         }
         $SqlConnection.Open()
-        Write-Verbose "Successfully connected to SQL database" 
+        Write-Information "Successfully connected to SQL database" 
 
         # Set the query
         $SqlCmd = [System.Data.SqlClient.SqlCommand]::new()
@@ -81,7 +73,7 @@ function Invoke-SQLQuery {
         if ($SqlConnection.State -eq "Open") {
             $SqlConnection.close()
         }
-        Write-Verbose "Successfully disconnected from SQL database"
+        Write-Information "Successfully disconnected from SQL database"
     }
 }
 
@@ -186,12 +178,12 @@ try {
         ErrorAction      = "Stop"
     }
 
-    Write-Verbose "SQL Query: $($getSaltoAccountSplatParams.SqlQuery | Out-String)"
+    Write-Information "SQL Query: $($getSaltoAccountSplatParams.SqlQuery | Out-String)"
 
     $getSaltoAccountResponse = [System.Collections.ArrayList]::new()
     Invoke-SQLQuery @getSaltoAccountSplatParams -Data ([ref]$getSaltoAccountResponse)
         
-    Write-Verbose "Queried account where [$($correlationField)] = [$($correlationValue)] from Salto DB. Result: $($getSaltoAccountResponse | ConvertTo-Json)"
+    Write-Information "Queried account where [$($correlationField)] = [$($correlationValue)] from Salto DB. Result: $($getSaltoAccountResponse | ConvertTo-Json)"
     #endregion Get account from Salto DB
 
     if ($actionContext.Configuration.correlateOnly -eq $true -and ($getSaltoAccountResponse | Measure-Object).count -eq 0) {
@@ -217,12 +209,12 @@ try {
         ErrorAction      = "Stop"
     }
 
-    Write-Verbose "SQL Query: $($getSaltoStagingAccountSplatParams.SqlQuery | Out-String)"
+    Write-Information "SQL Query: $($getSaltoStagingAccountSplatParams.SqlQuery | Out-String)"
 
     $getSaltoStagingAccountResponse = [System.Collections.ArrayList]::new()
     Invoke-SQLQuery @getSaltoStagingAccountSplatParams -Data ([ref]$getSaltoStagingAccountResponse)
 
-    Write-Verbose "Queried account where [ExtId] = [$($getSaltoAccountResponse.ExtID)] from Salto Staging DB. Result: $($getSaltoStagingAccountResponse | ConvertTo-Json)"
+    Write-Information "Queried account where [ExtId] = [$($getSaltoAccountResponse.ExtID)] from Salto Staging DB. Result: $($getSaltoStagingAccountResponse | ConvertTo-Json)"
     #endregion Get account from Salto Staging DB
 
     $correlatedAccount = $getSaltoStagingAccountResponse
@@ -251,10 +243,10 @@ try {
 
             # Set ExtId with ExtID of user in Salto DB, if not available, set with person externalId
             if (-not [string]::IsNullOrEmpty($getSaltoAccountResponse.ExtID)) {
-                $account.ExtId = $getSaltoAccountResponse.ExtID
+                $account | Add-Member -NotePropertyName 'ExtId' -NotePropertyValue $getSaltoAccountResponse.ExtID -Force
             }
             else {
-                $account.ExtId = $personContext.Person.ExternalId
+                $account | Add-Member -NotePropertyName 'ExtId' -NotePropertyValue $personContext.Person.ExternalId -Force
             }
             
             $createAccountSplatParams = @{
@@ -271,7 +263,7 @@ try {
                 ErrorAction      = "Stop"
             }
         
-            Write-Verbose "SQL Query: $($createAccountSplatParams.SqlQuery | Out-String)"
+            Write-Information "SQL Query: $($createAccountSplatParams.SqlQuery | Out-String)"
 
             if (-Not($actionContext.DryRun -eq $true)) {
                 $createAccountResponse = [System.Collections.ArrayList]::new()
