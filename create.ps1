@@ -192,6 +192,9 @@ try {
     if ($actionContext.Configuration.correlateOnly -eq $true -and ($getSaltoAccountResponse | Measure-Object).count -eq 0) {
         throw "No account where [$($correlationField)] = [$($correlationValue)] found in Salto DB. The option 'correlateOnly' is selected. Cannot continue."
     }
+    elseif (($getSaltoAccountResponse | Measure-Object).count -gt 1) {
+        throw "Multiple accounts [$(($getSaltoAccountResponse | Measure-Object).count)] found where [$($correlationField)] = [$($correlationValue)] in Salto DB."
+    }
 
     #region Get account from Salto Staging DB
     $actionMessage = "querying account where [ExtId] = [$($getSaltoAccountResponse.ExtID)] from Salto Staging DB"
