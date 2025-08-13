@@ -234,7 +234,10 @@ try {
     }
     elseif (($correlatedAccount | Measure-Object).count -eq 0) {
         $actionAccount = "NotFound"
-        # TODO If account only not found in Staging then insert (combination with Account import script)
+        if ($actionContext.AccountCorrelated -eq $true) {
+            Write-Information 'Inserting record in staging database after import account'
+            $actionAccount = "Create"
+        }
     }
     elseif (($correlatedAccount | Measure-Object).count -gt 1) {
         $actionAccount = "MultipleFound"
@@ -243,6 +246,49 @@ try {
 
     #region Process
     switch ($actionAccount) {
+        "Create" {
+            #region Create account                  
+            $actionMessage = "creating account with FirstName [$($account.FirstName)] and LastName [$($account.LastName)]"
+
+            # Set ExtId with ExtID of user in Salto DB
+            $account | Add-Member -NotePropertyName 'ExtId' -NotePropertyValue $actionContext.References.Account -Force
+            
+            $createAccountSplatParams = @{
+                ConnectionString = $actionContext.Configuration.connectionStringStaging
+                Username         = $actionContext.Configuration.username
+                Password         = $actionContext.Configuration.password
+                SqlQuery         = "
+                INSERT INTO
+                    [dbo].[$($actionContext.Configuration.dbTableStaging)] ([$($account.PSObject.Properties.Name -join "],[")],[ToBeProcessedBySalto])
+                VALUES
+                    ($($account.PSObject.Properties.Value.ForEach({ if ($_ -eq $null) { 'NULL' } else { '''' + $_.Replace("'", "''") + '''' } }) -join ', '),'1')
+                "
+                Verbose          = $false
+                ErrorAction      = "Stop"
+            }
+        
+            Write-Information "SQL Query: $($createAccountSplatParams.SqlQuery | Out-String)"
+
+            if (-Not($actionContext.DryRun -eq $true)) {
+                $createAccountResponse = [System.Collections.ArrayList]::new()
+                Invoke-SQLQuery @createAccountSplatParams -Data ([ref]$createAccountResponse)
+
+                # Add AccountReference to Data
+                $outputContext.Data | Add-Member -MemberType NoteProperty -Name "ExtId" -Value "$($account.ExtId)" -Force
+
+                $outputContext.AuditLogs.Add([PSCustomObject]@{
+                        # Action  = "" # Optional
+                        Message = "Created staging DB record with FirstName [$($account.FirstName)] and LastName [$($account.LastName)] with AccountReference: $($outputContext.AccountReference | ConvertTo-Json)."
+                        IsError = $false
+                    })
+            }
+            else {
+                Write-Warning "DryRun: Would staging DB record with FirstName [$($account.FirstName)], LastName [$($account.LastName)] and ExtId [$($account.ExtId)]."
+            }
+            #endregion Create account
+
+            break
+        }
         "Update" {
             #region Update account             
             $actionMessage = "updating account with AccountReference: $($actionContext.References.Account | ConvertTo-Json)"
