@@ -1,7 +1,9 @@
 #################################################
-# HelloID-Conn-Prov-Target-SaltoSpace-Delete
+# HelloID-Conn-Prov-Target-SaltoSpace-Enable
 # PowerShell V2
-# TODO: If not sending a delete but a disable. Readme note to configure the same as disable
+# TODO testing new active process this: (on enable)
+# dtActivation: Today
+# dtExpiration: Empty or far in the future (test)
 #################################################
 
 # Enable TLS1.2
@@ -134,10 +136,6 @@ try {
     $correlationValue = $actionContext.References.Account
 
     # Define account object
-    if ($actionContext.Origin -eq 'reconciliation') {
-        throw  'Salto Space deleting account is not supported with reconciliation. Skipping action.'
-    }
-
     $account = [PSCustomObject]$actionContext.Data.PsObject.Copy()
     $account = ConvertTo-FlatObject -Object $account
     #endRegion account
@@ -170,7 +168,7 @@ try {
     }
 
     Write-Information "SQL Query: $($getSaltoStagingAccountSplatParams.SqlQuery | Out-String)"
-    
+
     $getSaltoStagingAccountResponse = [System.Collections.ArrayList]::new()
     Invoke-SQLQuery @getSaltoStagingAccountSplatParams -Data ([ref]$getSaltoStagingAccountResponse)
 
@@ -181,11 +179,11 @@ try {
     if (($correlatedAccount | Measure-Object).count -gt 0) {
         $correlatedAccount = ConvertTo-FlatObject -Object $correlatedAccount
     }
-
-    #region Calulate action
+    
+    #region Calculated action
     $actionMessage = "calculating action"
     if (($correlatedAccount | Measure-Object).count -eq 1) {
-        $actionAccount = "Delete"
+        $actionAccount = "Enable"
     }
     elseif (($correlatedAccount | Measure-Object).count -eq 0) {
         $actionAccount = "NotFound"
@@ -193,58 +191,75 @@ try {
     elseif (($correlatedAccount | Measure-Object).count -gt 1) {
         $actionAccount = "MultipleFound"
     }
-    #endregion Calulate action
+    Write-Information "Calculated action: $actionAccount"
+    #endregion Calculated action
 
     #region Process
     switch ($actionAccount) {
-        "Delete" {
-            #region Delete account             
-            $actionMessage = "deleting account with AccountReference: $($actionContext.References.Account | ConvertTo-Json)"
+        "Enable" {
+            #region Update account             
+            $actionMessage = "enabling account with AccountReference: $($actionContext.References.Account | ConvertTo-Json)"
 
-            $deleteAccountSplatParams = @{
+            # Create a list of properties to update
+            $updatePropertiesList = [System.Collections.Generic.List[string]]::new()
+
+            foreach ($accountNewProperty in $accountNewProperties) {
+                # Define the value, handling nulls and escaping single quotes
+                $value = if ($accountNewProperty.Value -eq $null) {
+                    'NULL'
+                }
+                else {
+                    "'$($accountNewProperty.Value -replace "'", "''")'"
+                }
+                
+                # Add the property to the list
+                $updatePropertiesList.Add("[$($accountNewProperty.Name)] = $value")
+            }
+            
+            $updateAccountSplatParams = @{
                 ConnectionString = $actionContext.Configuration.connectionStringStaging
                 Username         = $actionContext.Configuration.username
                 Password         = $actionContext.Configuration.password
-                # On the delete action we only support setting Action and ToBeProcessedBySalto
                 SqlQuery         = "
-                UPDATE [dbo].[$($actionContext.Configuration.dbTableStaging)]
-                SET [Action] = '$($actionContext.data.Action)',
+                UPDATE
+                    [dbo].[$($actionContext.Configuration.dbTableStaging)]
+                SET
+                    $($updatePropertiesList -join ','),
+                    [Action] = '$($actionContext.data.Action)',
                     [ToBeProcessedBySalto] = '1'
-                WHERE [ExtId] = '$($actionContext.References.Account)'
+                WHERE
+                    [ExtId] = '$($actionContext.References.Account)'
                 "
                 Verbose          = $false
                 ErrorAction      = "Stop"
             }
         
-            Write-Information "SQL Query: $($deleteAccountSplatParams.SqlQuery | Out-String)"
+            Write-Information "SQL Query: $($updateAccountSplatParams.SqlQuery | Out-String)"
 
             if (-Not($actionContext.DryRun -eq $true)) {
-                $deleteAccountResponse = [System.Collections.ArrayList]::new()
-                Invoke-SQLQuery @deleteAccountSplatParams -Data ([ref]$deleteAccountResponse)
+                $updateAccountResponse = [System.Collections.ArrayList]::new()
+                Invoke-SQLQuery @updateAccountSplatParams -Data ([ref]$updateAccountResponse)
 
                 $outputContext.AuditLogs.Add([PSCustomObject]@{
                         # Action  = "" # Optional
-                        Message = "Deleted account with AccountReference: $($outputContext.AccountReference | ConvertTo-Json)."
+                        Message = "Enabled account with AccountReference: $($outputContext.AccountReference | ConvertTo-Json)."
                         IsError = $false
                     })
             }
             else {
-                Write-Warning "DryRun: Would delete account with AccountReference: $($outputContext.AccountReference | ConvertTo-Json)."
+                Write-Warning "DryRun: Would enable account with AccountReference: $($outputContext.AccountReference | ConvertTo-Json)."
             }
-            #endregion Delete account
+            #endregion Update account
 
             break
         }
 
         "NotFound" {
             #region No account found
-            $actionMessage = "skipping deleting account"
+            $actionMessage = "enabling account"
 
-            $outputContext.AuditLogs.Add([PSCustomObject]@{
-                    # Action  = "" # Optional
-                    Message = "Could not delete account with AccountReference: $($outputContext.AccountReference | ConvertTo-Json). Account not found, action skipped."
-                    IsError = $false
-                })
+            # Throw terminal error
+            throw "No account found where [$($correlationField)] = [$($correlationValue)]."
             #endregion No account found
 
             break
@@ -252,7 +267,7 @@ try {
 
         "MultipleFound" {
             #region Multiple accounts found
-            $actionMessage = "skipping deleting account"
+            $actionMessage = "enabling account"
 
             # Throw terminal error
             throw "Multiple accounts found where [$($correlationField)] = [$($correlationValue)]. Please correct this to ensure the correlation results in a single unique account."
@@ -272,7 +287,7 @@ catch {
     Write-Warning $warningMessage
 
     $outputContext.AuditLogs.Add([PSCustomObject]@{
-            # Action= "" # Optional
+            # Action = "" # Optional
             Message = $auditMessage
             IsError = $true
         })

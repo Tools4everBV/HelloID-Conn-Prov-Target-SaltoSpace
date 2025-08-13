@@ -80,6 +80,10 @@ function Invoke-SQLQuery {
 #endregion
 
 try {
+    if ($actionContext.Origin -eq 'reconciliation') {
+        throw  'Salto Space revoking permission is not supported with reconciliation. Skipping action.'
+    }
+
     #region Verify account reference
     $actionMessage = "verifying account reference"
     

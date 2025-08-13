@@ -1,6 +1,9 @@
 #################################################
 # HelloID-Conn-Prov-Target-SaltoSpace-Create
 # PowerShell V2
+# TODO testing new active process this: (on create)
+# dtActivation: Far in the future
+# dtExpiration: Empty
 #################################################
 
 # Enable TLS1.2

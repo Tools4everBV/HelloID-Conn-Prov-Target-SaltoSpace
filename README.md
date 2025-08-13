@@ -13,7 +13,7 @@
 > This repository contains only the connector and configuration code. The implementer is responsible for acquiring connection details such as the username, password, certificate, etc. You may also need to sign a contract or agreement with the supplier before implementing this connector. Please contact the client's application manager to coordinate the connector requirements.
 
 <p align="center">
-  <img src="https://github.com/Tools4everBV/HelloID-Conn-Prov-Target-SaltoSpace/blob/main/Logo.png?raw=true" alt="KPN Lisa Logo">
+  <img src="https://github.com/Tools4everBV/HelloID-Conn-Prov-Target-SaltoSpace/blob/main/Logo.png?raw=true">
 </p>
 
 
@@ -21,6 +21,7 @@
 
 - [HelloID-Conn-Prov-Target-SaltoSpace](#helloid-conn-prov-target-saltospace)
   - [Table of Contents](#table-of-contents)
+  - [Supported  features](#supported--features)
   - [Requirements](#requirements)
   - [Remarks](#remarks)
     - [Unique Name Requirement](#unique-name-requirement)
@@ -28,7 +29,6 @@
     - [`MobileAppType` Field](#mobileapptype-field)
     - [Staging Database Behavior](#staging-database-behavior)
   - [Introduction](#introduction)
-    - [Actions](#actions)
   - [Getting Started](#getting-started)
     - [Salto Staging Database](#salto-staging-database)
     - [Salto Database Access](#salto-database-access)
@@ -40,6 +40,18 @@
   - [Getting help](#getting-help)
   - [HelloID docs](#helloid-docs)
 
+## Supported  features
+
+The following features are available:
+
+| Feature                                   | Supported | Actions                                 | Remarks                                                                                                                                         |
+| ----------------------------------------- | --------- | --------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Account Lifecycle**                     | ✅         | Create, Update, Enable, Disable, Delete | (WIP) Enable and Disable are managed by setting `dtActivation` and `dtExpiration`.                                                              |
+| **Permissions**                           | ✅         | Retrieve, Grant, Revoke                 | (WIP) Importing permissions requires to add the Grant script in de Update script.                                                               |
+| **Resources**                             | ❌         | -                                       |                                                                                                                                                 |
+| **Entitlement Import: Accounts**          | ✅         | -                                       |                                                                                                                                                 |
+| **Entitlement Import: Permissions**       | ✅         | -                                       | (WIP) Importing permissions requires to add the Grant script in de Update script.                                                               |
+| **Governance Reconciliation Resolutions** | ✅         | -                                       | (WIP) Actions to the system with reconciliation are not supported because HelloID only manages the staging database and not the Salto Database. |
 
 ## Requirements
 
@@ -71,7 +83,7 @@
 
 ### `dtExpiration` Field
 
-- If the `dtExpiration` field is set to `null` or mapped as "none," no expiration date will be assigned to the entry.
+- If the `dtExpiration` field is set to `null` or mapped as "none," no expiration date will be assigned to the entry. TODO
 
 ### `MobileAppType` Field
 
@@ -86,23 +98,6 @@
 ## Introduction
 
 _HelloID-Conn-Prov-Target-SaltoSpace_ is a target connector that uses a staging database and a schedule in Salto Salto's REST APIs to interact with data. Below is a list of the actions provided by the connector.
-
-### Actions
-
-| Action                                                                                          | Description                                                                                            | Comment                                        |
-| ----------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------------ | ---------------------------------------------- |
-| [create.ps1](create.ps1)                                                                        | Create (or update) and correlate a user account                                                        |                                                |
-| [update.ps1](update.ps1)                                                                        | Update a user account                                                                                  |                                                |
-| [delete.ps1](delete.ps1)                                                                        | Delete a user account                                                                                  | Be cautious; deleted users cannot be restored. |
-| [permissions/accessGroups/permissions.ps1](/permissions/accessGroups/permissions.ps1)           | Retrieve all groups and provide them as entitlements                                                   |                                                |
-| [permissions/accessGroups/grantPermission.ps1](/permissions/accessGroups/grantPermission.ps1)   | Add a group to a user account                                                                          |                                                |
-| [permissions/accessGroups/revokePermission.ps1](/permissions/accessGroups/revokePermission.ps1) | Remove a group from a user account                                                                     |                                                |
-| [permissions/accessGroups/revokePermission.ps1](/permissions/accessGroups/revokePermission.ps1) | Remove a group from a user account                                                                     |                                                |
-| [assets/reports.sql](/assets/reports.sql)                                                       | SQL script to retrieve all group memberships in Salto Space and show which are not managed by HelloID. |                                                |
-| [assets/createStagingDBTable.SQL](/assets/createStagingDBTable.SQL)                             | SQL script to create the staging database table.                                                       |                                                |
-| [assets/correlationReport.ps1](/assets/correlationReport.ps1)                                   | Powershell script to generate a correlation report.                                                    |                                                |
-| [fieldMapping.json](fieldMapping.json)                                                          | Default fieldMapping.json                                                                              |                                                |
-
 
 ## Getting Started
 

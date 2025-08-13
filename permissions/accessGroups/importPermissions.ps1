@@ -1,5 +1,5 @@
 #################################################
-# HelloID-Conn-Prov-Target-SaltoSpace-Import
+# HelloID-Conn-Prov-Target-SaltoSpace-Permissions-Groups-Import
 # TODO: drycoded
 # PowerShell V2
 #################################################
@@ -128,53 +128,72 @@ function ConvertTo-FlatObject {
 #endregion
 
 try {
-    $actionMessage = "querying accounts from Salto DB"
-    $getSaltoAccountSplatParams = @{
+    $actionMessage = "querying groups from Salto DB"
+    $getSaltoGroupsSplatParams = @{
         ConnectionString = $actionContext.Configuration.connectionStringSalto
         Username         = $actionContext.Configuration.username
         Password         = $actionContext.Configuration.password
         SqlQuery         = "
         SELECT
-            *
+            tb_Groups.Id_Group
+            ,tb_Groups.Name
+            ,tb_Groups.Description
+            ,tb_Groups_Ext.ExtID as Group_ExtID
         FROM
-            [dbo].[tb_Users]
-            INNER JOIN [dbo].[tb_Users_Ext] ON tb_Users.id_user = tb_Users_Ext.id_user
+            [dbo].[tb_Groups]
+            INNER JOIN [dbo].[tb_Groups_Ext] ON tb_Groups.id_group = tb_Groups_Ext.id_group
+        ORDER BY
+            Name
         "
         Verbose          = $false
         ErrorAction      = "Stop"
     }
-    $getSaltoAccountResponse = [System.Collections.ArrayList]::new()
-    Invoke-SQLQuery @getSaltoAccountSplatParams -Data ([ref]$getSaltoAccountResponse)
-    $getSaltoAccountResponse = $getSaltoAccountResponse | Select-Object $($actionContext.ImportFields)
-    Write-Information "Successfully queried [$($getSaltoAccountResponse.count)] existing accounts"
+    $getSaltoGroupResponse = [System.Collections.ArrayList]::new()
+    Invoke-SQLQuery @getSaltoGroupsSplatParams -Data ([ref]$getSaltoGroupResponse)
+    $saltoGroupsFiltered = $getSaltoGroupResponse | Where-Object { $_.Group_ExtID -ne $null -or $_.Group_ExtID -ne '' }
+    Write-Information "Successfully queried [$($saltoGroupsFiltered.count)] existing groups"
 
-    foreach ($account in $getSaltoAccountResponse) {
-        $account = ConvertTo-FlatObject -Object $account
-        $dtExpiration = $account.dtExpiration
-        $dtActivation = $account.dtActivation
-        $now = Get-Date
-        $isActive = ($now -ge $dtActivation -and $now -le $dtExpiration)
-        #TODO Checking if this fixed value is always returned when no end date is provided
-        if ($account.dtExpiration -eq '01/01/2000 00:00:00') {
-            $account.dtExpiration = $null
-            $isActive = ($now -ge $dtActivation)
-        }
+    $actionMessage = "querying memberships from Salto DB"
+    $getSaltoMembershipsSplatParams = @{
+        ConnectionString = $actionContext.Configuration.connectionStringSalto
+        Username         = $actionContext.Configuration.username
+        Password         = $actionContext.Configuration.password
+        SqlQuery         = "
+        SELECT
+            tb_Users_Groups.ManagedByDBSync
+            ,tb_Users_Groups.id_group
+            ,tb_Users_Ext.ExtID as User_ExtID
+            ,tb_Groups_Ext.ExtID as Group_ExtID
+        FROM
+            tb_Users_Groups
+            INNER JOIN [dbo].[tb_Users_Ext] ON tb_Users_Ext.id_user = tb_Users_Groups.id_user
+            INNER JOIN [dbo].[tb_Groups_Ext] ON tb_Groups_Ext.id_group = tb_Users_Groups.id_group
+        "
+        Verbose          = $false
+        ErrorAction      = "Stop"
+    }
+    $getSaltoMembershipsResponse = [System.Collections.ArrayList]::new()
+    Invoke-SQLQuery @getSaltoMembershipsSplatParams -Data ([ref]$getSaltoMembershipsResponse)
+    $saltoGroupsFiltered = $getSaltoGroupResponse | Where-Object { ($_.User_ExtID -ne $null -and $_.User_ExtID -ne '') -and ($_.Group_ExtID -ne $null -and $_.Group_ExtID -ne '') }
+    $saltoMembershipsGrouped = $saltoGroupsFiltered | Group-Object -Property 'Group_ExtID' -AsHashTable -AsString
+    Write-Information "Successfully queried [$($saltoGroupsFiltered.count)] existing memberships"
 
-        $displayName = $account.FirstName + ' ' + $account.LastName
-        if ([string]::IsNullOrEmpty($displayName)) {
-            $displayName = $account.ExtID
-        }
-
-        # Return the result
-        Write-Output @{
-            AccountReference = $account.ExtID
-            DisplayName      = $displayName
-            UserName         = $account.ExtID
-            Enabled          = $isActive
-            Data             = $account
+    foreach ($permission in $saltoGroupsFiltered) {
+        $matchingMemberships = $saltoMembershipsGrouped[$permission.Group_ExtID].User_ExtID
+        if (-not [string]::IsNullOrEmpty($matchingMemberships)) {
+            Write-Output @{
+                AccountReferences   = @(
+                    $matchingMemberships
+                )
+                PermissionReference = @{
+                    Reference = $permission.Group_ExtID
+                }       
+                Description         = $permission.Name
+                DisplayName         = $permission.Description
+            }
         }
     }
-    Write-Information 'Target account import completed'
+    Write-Information 'Target permission import completed'
 }
 catch {
     $ex = $PSItem
