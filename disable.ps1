@@ -2,7 +2,7 @@
 # HelloID-Conn-Prov-Target-SaltoSpace-Disable
 # PowerShell V2
 # TODO testing new active process this: (on disable)
-# dtActivation: Don't update (reconciliation maybe a fixed value of yesterday??)
+# dtActivation: Don't update
 # dtExpiration: Yesterday
 #################################################
 
