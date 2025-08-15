@@ -203,13 +203,16 @@ try {
         "Disable" {
             #region Update account             
             $actionMessage = "disabling account with AccountReference: $($actionContext.References.Account | ConvertTo-Json)"
+           
+            $accountNewProperties = $actionContext.Data.PSObject.Properties # Quick fix om het werkend te maken, mogelijk compare toevoegen?
 
             # Create a list of properties to update
             $updatePropertiesList = [System.Collections.Generic.List[string]]::new()
 
             foreach ($accountNewProperty in $accountNewProperties) {
                 # Define the value, handling nulls and escaping single quotes
-                $value = if ($accountNewProperty.Value -eq $null) {
+                #$value = if ($accountNewProperty.Value -eq $null) {
+                $value = if ([String]::IsNullOrEmpty($accountNewProperty.Value)) {
                     'NULL'
                 }
                 else {
@@ -220,6 +223,24 @@ try {
                 $updatePropertiesList.Add("[$($accountNewProperty.Name)] = $value")
             }
             
+            # $updateAccountSplatParams = @{
+            #     ConnectionString = $actionContext.Configuration.connectionStringStaging
+            #     Username         = $actionContext.Configuration.username
+            #     Password         = $actionContext.Configuration.password
+            #     SqlQuery         = "
+            #     UPDATE
+            #         [dbo].[$($actionContext.Configuration.dbTableStaging)]
+            #     SET
+            #         $($updatePropertiesList -join ','),
+            #         [Action] = '$($actionContext.data.Action)',
+            #         [ToBeProcessedBySalto] = '1'
+            #     WHERE
+            #         [ExtId] = '$($actionContext.References.Account)'
+            #     "
+            #     Verbose          = $false
+            #     ErrorAction      = "Stop"
+            # }
+
             $updateAccountSplatParams = @{
                 ConnectionString = $actionContext.Configuration.connectionStringStaging
                 Username         = $actionContext.Configuration.username
@@ -229,14 +250,13 @@ try {
                     [dbo].[$($actionContext.Configuration.dbTableStaging)]
                 SET
                     $($updatePropertiesList -join ','),
-                    [Action] = '$($actionContext.data.Action)',
                     [ToBeProcessedBySalto] = '1'
                 WHERE
                     [ExtId] = '$($actionContext.References.Account)'
                 "
                 Verbose          = $false
                 ErrorAction      = "Stop"
-            }
+            }       
         
             Write-Information "SQL Query: $($updateAccountSplatParams.SqlQuery | Out-String)"
 

@@ -142,7 +142,7 @@ try {
 
     #region Verify account reference
     $actionMessage = "verifying account reference"
-    
+
     if ([string]::IsNullOrEmpty($($actionContext.References.Account))) {
         throw "The account reference could not be found"
     }
@@ -179,7 +179,7 @@ try {
     if (($correlatedAccount | Measure-Object).count -gt 0) {
         $correlatedAccount = ConvertTo-FlatObject -Object $correlatedAccount
     }
-    
+
     #region Calculated action
     $actionMessage = "calculating action"
     if (($correlatedAccount | Measure-Object).count -eq 1) {
@@ -197,25 +197,47 @@ try {
     #region Process
     switch ($actionAccount) {
         "Enable" {
-            #region Update account             
+            #region Update account
             $actionMessage = "enabling account with AccountReference: $($actionContext.References.Account | ConvertTo-Json)"
+
+            $accountNewProperties = $actionContext.Data.PSObject.Properties # Quick fix om het werkend te maken, mogelijk compare toevoegen?
 
             # Create a list of properties to update
             $updatePropertiesList = [System.Collections.Generic.List[string]]::new()
 
             foreach ($accountNewProperty in $accountNewProperties) {
-                # Define the value, handling nulls and escaping single quotes
-                $value = if ($accountNewProperty.Value -eq $null) {
+                # Define the value, handling nulls and escaping single quotes     
+                #$value = if ($accountNewProperty.Value -eq $null) {
+                $value = if ([String]::IsNullOrEmpty($accountNewProperty.Value)) {
                     'NULL'
                 }
                 else {
                     "'$($accountNewProperty.Value -replace "'", "''")'"
                 }
-                
+
                 # Add the property to the list
                 $updatePropertiesList.Add("[$($accountNewProperty.Name)] = $value")
             }
-            
+
+            # Action kwam dubbel voor
+
+            # $updateAccountSplatParams = @{
+            #     ConnectionString = $actionContext.Configuration.connectionStringStaging
+            #     Username         = $actionContext.Configuration.username
+            #     Password         = $actionContext.Configuration.password
+            #     SqlQuery         = "
+            #     UPDATE
+            #         [dbo].[$($actionContext.Configuration.dbTableStaging)]
+            #     SET
+            #         $($updatePropertiesList -join ','),
+            #         [Action] = '$($actionContext.data.Action)',
+            #         [ToBeProcessedBySalto] = '1'
+            #     WHERE
+            #         [ExtId] = '$($actionContext.References.Account)'
+            #     "
+            #     Verbose          = $false
+            #     ErrorAction      = "Stop"
+            # }
             $updateAccountSplatParams = @{
                 ConnectionString = $actionContext.Configuration.connectionStringStaging
                 Username         = $actionContext.Configuration.username
@@ -225,7 +247,6 @@ try {
                     [dbo].[$($actionContext.Configuration.dbTableStaging)]
                 SET
                     $($updatePropertiesList -join ','),
-                    [Action] = '$($actionContext.data.Action)',
                     [ToBeProcessedBySalto] = '1'
                 WHERE
                     [ExtId] = '$($actionContext.References.Account)'
@@ -233,7 +254,6 @@ try {
                 Verbose          = $false
                 ErrorAction      = "Stop"
             }
-        
             Write-Information "SQL Query: $($updateAccountSplatParams.SqlQuery | Out-String)"
 
             if (-Not($actionContext.DryRun -eq $true)) {

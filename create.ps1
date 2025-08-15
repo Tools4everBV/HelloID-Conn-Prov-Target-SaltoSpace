@@ -185,11 +185,18 @@ try {
 
     $getSaltoAccountResponse = [System.Collections.ArrayList]::new()
     Invoke-SQLQuery @getSaltoAccountSplatParams -Data ([ref]$getSaltoAccountResponse)
-        
+
+    #Ik kom hier een rare situatie tegen bij 4 users:
+    # Error at Line [297]: Invoke-SQLQuery @createAccountSplatParams -Data ([ref]$createAccountResponse) . Error: Exception calling "Fill" with "1" argument(s): "Violation of PRIMARY KEY constraint 'SaltoCardholders_PK'. Cannot insert duplicate key in object 'dbo.tb_SaltoCardholdersSQLServer'. The duplicate key value is (1009973). The statement has been terminated."
+    # Er stond een spatie in personeelsnummer in Salto, user al in staging aanwezig onder juist extId.
+    # Concluse: opties: Geen insert maar update doen als persoon al in staging db aanwezig is; foutmelding geven.
+    # Voor nu oplossing: personeelsnummer in Salto corrigeren
+
     Write-Information "Queried account where [$($correlationField)] = [$($correlationValue)] from Salto DB. Result: $($getSaltoAccountResponse | ConvertTo-Json)"
     #endregion Get account from Salto DB
 
     if ($actionContext.Configuration.correlateOnly -eq $true -and ($getSaltoAccountResponse | Measure-Object).count -eq 0) {
+        #Optie bestaat niet in config. Lijkt me ook niet wenselijk voor deze connector
         throw "No account where [$($correlationField)] = [$($correlationValue)] found in Salto DB. The option 'correlateOnly' is selected. Cannot continue."
     }
     elseif (($getSaltoAccountResponse | Measure-Object).count -gt 1) {
@@ -230,10 +237,13 @@ try {
     
     #region Calulate action
     $actionMessage = "calculating action"
-    if (($correlatedAccount | Measure-Object).count -eq 1 -and -not[string]::IsNullOrEmpty($correlatedAccount.ExtId)) {
+
+    #if (($correlatedAccount | Measure-Object).count -eq 1 -and -not[string]::IsNullOrEmpty($correlatedAccount.ExtId)) {
+    if (($correlatedAccount | Measure-Object).count -eq 1 -and -not[string]::IsNullOrEmpty($getSaltoAccountResponse.ExtId)) {
         $actionAccount = "Correlate"
     }
-    elseif (($correlatedAccount | Measure-Object).count -eq 0 -or [string]::IsNullOrEmpty($correlatedAccount.ExtId)) {
+    #elseif (($correlatedAccount | Measure-Object).count -eq 0 -or [string]::IsNullOrEmpty($correlatedAccount.ExtId)) {
+    elseif (($correlatedAccount | Measure-Object).count -eq 0 -or [string]::IsNullOrEmpty($getSaltoAccountResponse.ExtId)) {
         $actionAccount = "Create"
     }
     elseif (($correlatedAccount | Measure-Object).count -gt 1) {
@@ -298,9 +308,11 @@ try {
             $actionMessage = "correlating to account"
 
             # Set AccountReference and add AccountReference to Data
-            $outputContext.AccountReference = "$($correlatedAccount.ExtId)"
+            #$outputContext.AccountReference = "$($correlatedAccount.ExtId)"
+            $outputContext.AccountReference = "$($getSaltoAccountResponse.ExtId)"
             # $outputContext.Data = $correlatedAccount.PsObject.Copy() # Possible unnecessary
-            $outputContext.Data | Add-Member -MemberType NoteProperty -Name "ExtId" -Value "$($correlatedAccount.ExtId)" -Force
+            #$outputContext.Data | Add-Member -MemberType NoteProperty -Name "ExtId" -Value "$($correlatedAccount.ExtId)" -Force            
+            $outputContext.Data | Add-Member -MemberType NoteProperty -Name "ExtId" -Value "$($getSaltoAccountResponse.ExtId)" -Force
 
             $outputContext.AuditLogs.Add([PSCustomObject]@{
                     Action  = "CorrelateAccount" # Optionally specify a different action for this audit log

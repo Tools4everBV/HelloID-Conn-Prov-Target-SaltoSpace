@@ -142,7 +142,7 @@ try {
 
     #region Verify account reference
     $actionMessage = "verifying account reference"
-    
+
     if ([string]::IsNullOrEmpty($($actionContext.References.Account))) {
         throw "The account reference could not be found"
     }
@@ -179,7 +179,7 @@ try {
     if (($correlatedAccount | Measure-Object).count -gt 0) {
         $correlatedAccount = ConvertTo-FlatObject -Object $correlatedAccount
     }
-    
+
     #region Calulate action
     $actionMessage = "calculating action"
     if (($correlatedAccount | Measure-Object).count -eq 1) {
@@ -228,7 +228,7 @@ try {
         }
         else {
             $actionAccount = "NoChanges"
-        }            
+        }
 
         Write-Information "Compared current account to mapped properties. Result: $actionAccount"
     }
@@ -247,12 +247,12 @@ try {
     #region Process
     switch ($actionAccount) {
         "Create" {
-            #region Create account                  
+            #region Create account
             $actionMessage = "creating account with FirstName [$($account.FirstName)] and LastName [$($account.LastName)]"
 
             # Set ExtId with ExtID of user in Salto DB
             $account | Add-Member -NotePropertyName 'ExtId' -NotePropertyValue $actionContext.References.Account -Force
-            
+
             $createAccountSplatParams = @{
                 ConnectionString = $actionContext.Configuration.connectionStringStaging
                 Username         = $actionContext.Configuration.username
@@ -266,7 +266,7 @@ try {
                 Verbose          = $false
                 ErrorAction      = "Stop"
             }
-        
+
             Write-Information "SQL Query: $($createAccountSplatParams.SqlQuery | Out-String)"
 
             if (-Not($actionContext.DryRun -eq $true)) {
@@ -290,7 +290,7 @@ try {
             break
         }
         "Update" {
-            #region Update account             
+            #region Update account
             $actionMessage = "updating account with AccountReference: $($actionContext.References.Account | ConvertTo-Json)"
 
             # Create a list of properties to update
@@ -304,11 +304,11 @@ try {
                 else {
                     "'$($accountNewProperty.Value -replace "'", "''")'"
                 }
-                
+
                 # Add the property to the list
                 $updatePropertiesList.Add("[$($accountNewProperty.Name)] = $value")
             }
-            
+
             $updateAccountSplatParams = @{
                 ConnectionString = $actionContext.Configuration.connectionStringStaging
                 Username         = $actionContext.Configuration.username
@@ -326,7 +326,7 @@ try {
                 Verbose          = $false
                 ErrorAction      = "Stop"
             }
-        
+
             Write-Information "SQL Query: $($updateAccountSplatParams.SqlQuery | Out-String)"
 
             if (-Not($actionContext.DryRun -eq $true)) {

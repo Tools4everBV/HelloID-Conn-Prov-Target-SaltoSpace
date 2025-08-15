@@ -9,7 +9,9 @@
                 {
                     "MapForActions": [
                         "Create",
-                        "Update"
+                        "Enable",
+                        "Update",
+                        "Disable"
                     ],
                     "MappingMode": "Fixed",
                     "Value": "\"3\"",
