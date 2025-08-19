@@ -136,7 +136,11 @@ try {
     $correlationValue = $actionContext.CorrelationConfiguration.personFieldValue
 
     # Define account object
-    $account = [PSCustomObject]$actionContext.Data.PsObject.Copy()
+    $account = $actionContext.Data
+    # Make sure ExtID is always in $account
+    if (-Not($account.PSObject.Properties.Name -Contains 'ExtID')) {
+        $account | Add-Member -NotePropertyName 'ExtId' -NotePropertyValue $null -Force
+    }
     #endRegion account
 
     #region Verify correlation configuration and properties
@@ -186,22 +190,24 @@ try {
     $getSaltoAccountResponse = [System.Collections.ArrayList]::new()
     Invoke-SQLQuery @getSaltoAccountSplatParams -Data ([ref]$getSaltoAccountResponse)
 
-    #Ik kom hier een rare situatie tegen bij 4 users:
-    # Error at Line [297]: Invoke-SQLQuery @createAccountSplatParams -Data ([ref]$createAccountResponse) . Error: Exception calling "Fill" with "1" argument(s): "Violation of PRIMARY KEY constraint 'SaltoCardholders_PK'. Cannot insert duplicate key in object 'dbo.tb_SaltoCardholdersSQLServer'. The duplicate key value is (1009973). The statement has been terminated."
-    # Er stond een spatie in personeelsnummer in Salto, user al in staging aanwezig onder juist extId.
-    # Concluse: opties: Geen insert maar update doen als persoon al in staging db aanwezig is; foutmelding geven.
-    # Voor nu oplossing: personeelsnummer in Salto corrigeren
-
     Write-Information "Queried account where [$($correlationField)] = [$($correlationValue)] from Salto DB. Result: $($getSaltoAccountResponse | ConvertTo-Json)"
     #endregion Get account from Salto DB
 
+ 
     if (($getSaltoAccountResponse | Measure-Object).count -gt 1) {
         throw "Multiple accounts [$(($getSaltoAccountResponse | Measure-Object).count)] found where [$($correlationField)] = [$($correlationValue)] in Salto DB."
     }
+    elseif (($getSaltoAccountResponse | Measure-Object).count -eq 1) {
+        # Record found in Salto, check if record is available in staging
+        $extIdStaging = $getSaltoAccountResponse.ExtID
+    }
+    else {
+        # Record not found in Salto, check if HelloID ExternalID is available in staging
+        $extIdStaging = $personContext.Person.ExternalId
+    }
 
     #region Get account from Salto Staging DB
-    $actionMessage = "querying account where [ExtId] = [$($getSaltoAccountResponse.ExtID)] from Salto Staging DB"
-
+    $actionMessage = "querying account where [ExtId] = [$extIdStaging] from Salto Staging DB"
     $getSaltoStagingAccountSplatParams = @{
         ConnectionString = $actionContext.Configuration.connectionStringStaging
         Username         = $actionContext.Configuration.username
@@ -212,7 +218,7 @@ try {
         FROM
             [dbo].[$($actionContext.Configuration.dbTableStaging)]
         WHERE
-            [ExtId] = '$($getSaltoAccountResponse.ExtID)'
+            [ExtId] = '$extIdStaging'
         "
         Verbose          = $false
         ErrorAction      = "Stop"
@@ -223,7 +229,7 @@ try {
     $getSaltoStagingAccountResponse = [System.Collections.ArrayList]::new()
     Invoke-SQLQuery @getSaltoStagingAccountSplatParams -Data ([ref]$getSaltoStagingAccountResponse)
 
-    Write-Information "Queried account where [ExtId] = [$($getSaltoAccountResponse.ExtID)] from Salto Staging DB. Result: $($getSaltoStagingAccountResponse | ConvertTo-Json)"
+    Write-Information  "Queried account where [ExtId] = [$($extIdStaging)] from Salto Staging DB. Result: $($getSaltoStagingAccountResponse | ConvertTo-Json)"
     #endregion Get account from Salto Staging DB
 
     $correlatedAccount = $getSaltoStagingAccountResponse
@@ -253,10 +259,10 @@ try {
 
             # Set ExtId with ExtID of user in Salto DB, if not available, set with person externalId
             if (-not [string]::IsNullOrEmpty($getSaltoAccountResponse.ExtID)) {
-                $account | Add-Member -NotePropertyName 'ExtId' -NotePropertyValue $getSaltoAccountResponse.ExtID -Force
+                $account.ExtID = $getSaltoAccountResponse.ExtID
             }
             else {
-                $account | Add-Member -NotePropertyName 'ExtId' -NotePropertyValue $personContext.Person.ExternalId -Force
+                $account.ExtID = $personContext.Person.ExternalId
             }
             
             $createAccountSplatParams = @{
@@ -302,11 +308,8 @@ try {
             $actionMessage = "correlating to account"
 
             # Set AccountReference and add AccountReference to Data
-            #$outputContext.AccountReference = "$($correlatedAccount.ExtId)"
-            $outputContext.AccountReference = "$($getSaltoAccountResponse.ExtId)"
-            # $outputContext.Data = $correlatedAccount.PsObject.Copy() # Possible unnecessary
-            #$outputContext.Data | Add-Member -MemberType NoteProperty -Name "ExtId" -Value "$($correlatedAccount.ExtId)" -Force            
-            $outputContext.Data | Add-Member -MemberType NoteProperty -Name "ExtId" -Value "$($getSaltoAccountResponse.ExtId)" -Force
+            $outputContext.AccountReference = "$($correlatedAccount.ExtId)"       
+            $outputContext.Data | Add-Member -MemberType NoteProperty -Name "ExtId" -Value "$($correlatedAccount.ExtId)" -Force
 
             $outputContext.AuditLogs.Add([PSCustomObject]@{
                     Action  = "CorrelateAccount" # Optionally specify a different action for this audit log
@@ -353,7 +356,7 @@ finally {
         $outputContext.Success = $true
     }
 
-    # Check if accountreference is set, if not set, set this with default value as this must contain a value
+    # Check if accountReference is set, if not set, set this with default value as this must contain a value
     if ([String]::IsNullOrEmpty($outputContext.AccountReference) -and $actionContext.DryRun -eq $true) {
         $outputContext.AccountReference = "DryRun: Currently not available"
     }

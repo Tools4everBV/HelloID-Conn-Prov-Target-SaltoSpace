@@ -133,11 +133,10 @@ try {
     $correlationValue = $actionContext.References.Account
 
     # Define account object
-    $account = [PSCustomObject]$actionContext.Data.PsObject.Copy()
+    $account = $actionContext.Data.PsObject.Copy()
     $account = ConvertTo-FlatObject -Object $account
 
-    # Define properties to compare for update
-    $accountPropertiesToCompare = $account.PsObject.Properties.Name | Select-Object -ExcludeProperty 'Action', 'ToBeProcessedBySalto'
+    $accountPropertiesToCompare = $account.PsObject.Properties.Name | Select-Object -ExcludeProperty 'ToBeProcessedBySalto'
     #endRegion account
 
     #region Verify account reference
@@ -172,13 +171,13 @@ try {
     $getSaltoStagingAccountResponse = [System.Collections.ArrayList]::new()
     Invoke-SQLQuery @getSaltoStagingAccountSplatParams -Data ([ref]$getSaltoStagingAccountResponse)
 
-    Write-Information "Queried account where [$correlationField] = [$correlationValue] from Salto Staging DB. Result: $($correlatedAccount | ConvertTo-Json)"
-    #endregion Get account from Salto Staging DB
-
     $correlatedAccount = $getSaltoStagingAccountResponse
     if (($correlatedAccount | Measure-Object).count -gt 0) {
         $correlatedAccount = ConvertTo-FlatObject -Object $correlatedAccount
     }
+
+    Write-Information "Queried account where [$correlationField] = [$correlationValue] from Salto Staging DB. Result: $($correlatedAccount | ConvertTo-Json)"
+    #endregion Get account from Salto Staging DB
 
     #region Calulate action
     $actionMessage = "calculating action"
@@ -201,29 +200,11 @@ try {
 
         if ($null -ne $accountSplatCompareProperties.ReferenceObject -and $null -ne $accountSplatCompareProperties.DifferenceObject) {
             $accountPropertiesChanged = Compare-Object @accountSplatCompareProperties -PassThru
-            $accountOldProperties = $accountPropertiesChanged | Where-Object { $_.SideIndicator -eq "<=" }
             $accountNewProperties = $accountPropertiesChanged | Where-Object { $_.SideIndicator -eq "=>" }
         }
 
         if ($accountNewProperties) {
-            # Create custom object with old and new values
-            $accountChangedPropertiesObject = [PSCustomObject]@{
-                OldValues = @{}
-                NewValues = @{}
-            }
-
-            # Add the old properties to the custom object with old and new values
-            foreach ($accountOldProperty in $accountOldProperties) {
-                $accountChangedPropertiesObject.OldValues.$($accountOldProperty.Name) = $accountOldProperty.Value
-            }
-
-            # Add the new properties to the custom object with old and new values
-            foreach ($accountNewProperty in $accountNewProperties) {
-                $accountChangedPropertiesObject.NewValues.$($accountNewProperty.Name) = $accountNewProperty.Value
-            }
-
-            Write-Information "Changed properties: $($accountChangedPropertiesObject | ConvertTo-Json)"
-
+            Write-Information "Changed properties: [$($accountNewProperties.name -join ',')]"
             $actionAccount = "Update"
         }
         else {
@@ -235,7 +216,7 @@ try {
     elseif (($correlatedAccount | Measure-Object).count -eq 0) {
         $actionAccount = "NotFound"
         if ($actionContext.AccountCorrelated -eq $true) {
-            Write-Information 'Inserting record in staging database after import account'
+            Write-Information 'Inserting record in staging database after import account data'
             $actionAccount = "Create"
         }
     }
@@ -319,7 +300,6 @@ try {
                     [dbo].[$($actionContext.Configuration.dbTableStaging)]
                 SET
                     $(if(-NOT [string]::IsNullOrEmpty($updatePropertiesList)){($updatePropertiesList -join ',') + ','})
-                    [Action] = '$($actionContext.data.Action)',
                     [ToBeProcessedBySalto] = '1'
                 WHERE
                     [ExtId] = '$($actionContext.References.Account)'
@@ -336,12 +316,12 @@ try {
 
                 $outputContext.AuditLogs.Add([PSCustomObject]@{
                         # Action  = "" # Optional
-                        Message = "Updated account with AccountReference: $($outputContext.AccountReference | ConvertTo-Json). Old values: $($accountChangedPropertiesObject.oldValues | ConvertTo-Json). New values: $($accountChangedPropertiesObject.newValues | ConvertTo-Json)."
+                        Message = "Updated account with AccountReference: $($outputContext.AccountReference | ConvertTo-Json), Account property(s) updated: [$($accountNewProperties.name -join ',')]"
                         IsError = $false
                     })
             }
             else {
-                Write-Warning "DryRun: Would update account with AccountReference: $($outputContext.AccountReference | ConvertTo-Json). Old values: $($accountChangedPropertiesObject.oldValues | ConvertTo-Json). New values: $($accountChangedPropertiesObject.newValues | ConvertTo-Json)."
+                Write-Warning "DryRun: Would update account with AccountReference: $($outputContext.AccountReference | ConvertTo-Json), Account property(s) updated: [$($accountNewProperties.name -join ',')]"
             }
             #endregion Update account
 

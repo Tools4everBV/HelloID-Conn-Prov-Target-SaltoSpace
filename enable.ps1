@@ -136,8 +136,11 @@ try {
     $correlationValue = $actionContext.References.Account
 
     # Define account object
-    $account = [PSCustomObject]$actionContext.Data.PsObject.Copy()
+    $account = $actionContext.Data
     $account = ConvertTo-FlatObject -Object $account
+
+    # Define properties to compare for update
+    $accountPropertiesToCompare = $account.PsObject.Properties.Name | Select-Object -ExcludeProperty 'ToBeProcessedBySalto'
     #endRegion account
 
     #region Verify account reference
@@ -172,18 +175,47 @@ try {
     $getSaltoStagingAccountResponse = [System.Collections.ArrayList]::new()
     Invoke-SQLQuery @getSaltoStagingAccountSplatParams -Data ([ref]$getSaltoStagingAccountResponse)
 
-    Write-Information "Queried account where [$correlationField] = [$correlationValue] from Salto Staging DB. Result: $($correlatedAccount | ConvertTo-Json)"
-    #endregion Get account from Salto Staging DB
-
     $correlatedAccount = $getSaltoStagingAccountResponse
     if (($correlatedAccount | Measure-Object).count -gt 0) {
         $correlatedAccount = ConvertTo-FlatObject -Object $correlatedAccount
     }
 
-    #region Calculated action
+    Write-Information "Queried account where [$correlationField] = [$correlationValue] from Salto Staging DB. Result: $($correlatedAccount | ConvertTo-Json)"
+    #endregion Get account from Salto Staging DB
+
+    #region Calulate action
     $actionMessage = "calculating action"
     if (($correlatedAccount | Measure-Object).count -eq 1) {
-        $actionAccount = "Enable"
+        $actionMessage = "comparing current account to mapped properties"
+
+        # Set Previous data (if there are no changes between PreviousData and Data, HelloID will log "update finished with no changes")
+        $outputContext.PreviousData = $correlatedAccount.PsObject.Copy()
+
+        # Create reference object from correlated account
+        $accountReferenceObject = $correlatedAccount.PsObject.Copy()
+
+        # Create difference object from mapped properties
+        $accountDifferenceObject = $account.PsObject.Copy()
+
+        $accountSplatCompareProperties = @{
+            ReferenceObject  = $accountReferenceObject.PSObject.Properties | Where-Object { $_.Name -in $accountPropertiesToCompare }
+            DifferenceObject = $accountDifferenceObject.PSObject.Properties | Where-Object { $_.Name -in $accountPropertiesToCompare }
+        }
+
+        if ($null -ne $accountSplatCompareProperties.ReferenceObject -and $null -ne $accountSplatCompareProperties.DifferenceObject) {
+            $accountPropertiesChanged = Compare-Object @accountSplatCompareProperties -PassThru
+            $accountNewProperties = $accountPropertiesChanged | Where-Object { $_.SideIndicator -eq "=>" }
+        }
+
+        if ($accountNewProperties) {
+            Write-Information "Changed properties: [$($accountNewProperties.name -join ',')]"
+            $actionAccount = "Enable"
+        }
+        else {
+            $actionAccount = "NoChanges"
+        }
+
+        Write-Information "Compared current account to mapped properties. Result: $actionAccount"
     }
     elseif (($correlatedAccount | Measure-Object).count -eq 0) {
         $actionAccount = "NotFound"
@@ -191,16 +223,13 @@ try {
     elseif (($correlatedAccount | Measure-Object).count -gt 1) {
         $actionAccount = "MultipleFound"
     }
-    Write-Information "Calculated action: $actionAccount"
-    #endregion Calculated action
+    #endregion Calulate action
 
     #region Process
     switch ($actionAccount) {
         "Enable" {
             #region Update account
             $actionMessage = "enabling account with AccountReference: $($actionContext.References.Account | ConvertTo-Json)"
-
-            $accountNewProperties = $actionContext.Data.PSObject.Properties # Quick fix om het werkend te maken, mogelijk compare toevoegen?
 
             # Create a list of properties to update
             $updatePropertiesList = [System.Collections.Generic.List[string]]::new()
@@ -227,7 +256,6 @@ try {
                     [dbo].[$($actionContext.Configuration.dbTableStaging)]
                 SET
                     $(if(-NOT [string]::IsNullOrEmpty($updatePropertiesList)){($updatePropertiesList -join ',') + ','})
-                    [Action] = '$($actionContext.data.Action)',
                     [ToBeProcessedBySalto] = '1'
                 WHERE
                     [ExtId] = '$($actionContext.References.Account)'
@@ -244,12 +272,12 @@ try {
 
                 $outputContext.AuditLogs.Add([PSCustomObject]@{
                         # Action  = "" # Optional
-                        Message = "Enabled account with AccountReference: $($outputContext.AccountReference | ConvertTo-Json)."
+                        Message = "Enabled account with AccountReference: $($outputContext.AccountReference | ConvertTo-Json), Account property(s) updated: [$($accountNewProperties.name -join ',')]"
                         IsError = $false
                     })
             }
             else {
-                Write-Warning "DryRun: Would enable account with AccountReference: $($outputContext.AccountReference | ConvertTo-Json)."
+                Write-Warning "DryRun: Would enable account with AccountReference: $($outputContext.AccountReference | ConvertTo-Json), Account property(s) updated: [$($accountNewProperties.name -join ',')]"
             }
             #endregion Update account
 
