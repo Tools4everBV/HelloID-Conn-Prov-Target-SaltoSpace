@@ -299,7 +299,7 @@ try {
 
             foreach ($accountNewProperty in $accountNewProperties) {
                 # Define the value, handling nulls and escaping single quotes
-                $value = if ($accountNewProperty.Value -eq $null) {
+                $value = if ([String]::IsNullOrEmpty($accountNewProperty.Value)) {
                     'NULL'
                 }
                 else {
