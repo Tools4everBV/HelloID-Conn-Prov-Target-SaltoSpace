@@ -211,35 +211,16 @@ try {
 
             foreach ($accountNewProperty in $accountNewProperties) {
                 # Define the value, handling nulls and escaping single quotes
-                #$value = if ($accountNewProperty.Value -eq $null) {
-                $value = if ([String]::IsNullOrEmpty($accountNewProperty.Value)) {
+                $value = if ($accountNewProperty.Value -eq $null) {
                     'NULL'
                 }
                 else {
                     "'$($accountNewProperty.Value -replace "'", "''")'"
                 }
-                
+
                 # Add the property to the list
                 $updatePropertiesList.Add("[$($accountNewProperty.Name)] = $value")
             }
-            
-            # $updateAccountSplatParams = @{
-            #     ConnectionString = $actionContext.Configuration.connectionStringStaging
-            #     Username         = $actionContext.Configuration.username
-            #     Password         = $actionContext.Configuration.password
-            #     SqlQuery         = "
-            #     UPDATE
-            #         [dbo].[$($actionContext.Configuration.dbTableStaging)]
-            #     SET
-            #         $($updatePropertiesList -join ','),
-            #         [Action] = '$($actionContext.data.Action)',
-            #         [ToBeProcessedBySalto] = '1'
-            #     WHERE
-            #         [ExtId] = '$($actionContext.References.Account)'
-            #     "
-            #     Verbose          = $false
-            #     ErrorAction      = "Stop"
-            # }
 
             $updateAccountSplatParams = @{
                 ConnectionString = $actionContext.Configuration.connectionStringStaging
@@ -249,15 +230,16 @@ try {
                 UPDATE
                     [dbo].[$($actionContext.Configuration.dbTableStaging)]
                 SET
-                    $($updatePropertiesList -join ','),
+                    $(if(-NOT [string]::IsNullOrEmpty($updatePropertiesList)){($updatePropertiesList -join ',') + ','})
+                    [Action] = '$($actionContext.data.Action)',
                     [ToBeProcessedBySalto] = '1'
                 WHERE
                     [ExtId] = '$($actionContext.References.Account)'
                 "
                 Verbose          = $false
                 ErrorAction      = "Stop"
-            }       
-        
+            }
+
             Write-Information "SQL Query: $($updateAccountSplatParams.SqlQuery | Out-String)"
 
             if (-Not($actionContext.DryRun -eq $true)) {

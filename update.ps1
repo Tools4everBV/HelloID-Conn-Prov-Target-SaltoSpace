@@ -289,6 +289,7 @@ try {
 
             break
         }
+        
         "Update" {
             #region Update account
             $actionMessage = "updating account with AccountReference: $($actionContext.References.Account | ConvertTo-Json)"
@@ -317,7 +318,7 @@ try {
                 UPDATE
                     [dbo].[$($actionContext.Configuration.dbTableStaging)]
                 SET
-                    $($updatePropertiesList -join ','),
+                    $(if(-NOT [string]::IsNullOrEmpty($updatePropertiesList)){($updatePropertiesList -join ',') + ','})
                     [Action] = '$($actionContext.data.Action)',
                     [ToBeProcessedBySalto] = '1'
                 WHERE
