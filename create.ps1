@@ -195,11 +195,7 @@ try {
     Write-Information "Queried account where [$($correlationField)] = [$($correlationValue)] from Salto DB. Result: $($getSaltoAccountResponse | ConvertTo-Json)"
     #endregion Get account from Salto DB
 
-    if ($actionContext.Configuration.correlateOnly -eq $true -and ($getSaltoAccountResponse | Measure-Object).count -eq 0) {
-        #Optie bestaat niet in config. Lijkt me ook niet wenselijk voor deze connector
-        throw "No account where [$($correlationField)] = [$($correlationValue)] found in Salto DB. The option 'correlateOnly' is selected. Cannot continue."
-    }
-    elseif (($getSaltoAccountResponse | Measure-Object).count -gt 1) {
+    if (($getSaltoAccountResponse | Measure-Object).count -gt 1) {
         throw "Multiple accounts [$(($getSaltoAccountResponse | Measure-Object).count)] found where [$($correlationField)] = [$($correlationValue)] in Salto DB."
     }
 
@@ -238,11 +234,9 @@ try {
     #region Calulate action
     $actionMessage = "calculating action"
 
-    #if (($correlatedAccount | Measure-Object).count -eq 1 -and -not[string]::IsNullOrEmpty($correlatedAccount.ExtId)) {
-    if (($correlatedAccount | Measure-Object).count -eq 1 -and -not[string]::IsNullOrEmpty($getSaltoAccountResponse.ExtId)) {
+    if (($correlatedAccount | Measure-Object).count -eq 1) {
         $actionAccount = "Correlate"
     }
-    #elseif (($correlatedAccount | Measure-Object).count -eq 0 -or [string]::IsNullOrEmpty($correlatedAccount.ExtId)) {
     elseif (($correlatedAccount | Measure-Object).count -eq 0 -or [string]::IsNullOrEmpty($getSaltoAccountResponse.ExtId)) {
         $actionAccount = "Create"
     }

@@ -64,7 +64,7 @@
         },
         {
             "Name": "Dummy1",
-            "Description": "General purpose field #1.",
+            "Description": "General purpose field #1. The maximum length of this field is 32 characters.",
             "Type": "Text",
             "MappingActions": [
                 {
@@ -81,7 +81,7 @@
         },
         {
             "Name": "Dummy2",
-            "Description": "General purpose field #2.",
+            "Description": "General purpose field #2. The maximum length of this field is 32 characters.",
             "Type": "Text",
             "MappingActions": [
                 {
@@ -98,7 +98,7 @@
         },
         {
             "Name": "Dummy3",
-            "Description": "General purpose field #3.",
+            "Description": "General purpose field #3. The maximum length of this field is 32 characters.",
             "Type": "Text",
             "MappingActions": [
                 {
@@ -114,7 +114,7 @@
         },
         {
             "Name": "Dummy4",
-            "Description": "General purpose field #4.",
+            "Description": "General purpose field #4. The maximum length of this field is 32 characters.",
             "Type": "Text",
             "MappingActions": [
                 {
@@ -130,7 +130,7 @@
         },
         {
             "Name": "Dummy5",
-            "Description": "General purpose field #5.",
+            "Description": "General purpose field #5. The maximum length of this field is 32 characters.",
             "Type": "Text",
             "MappingActions": [
                 {
