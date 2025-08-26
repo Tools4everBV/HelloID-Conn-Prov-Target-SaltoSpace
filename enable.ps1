@@ -1,9 +1,6 @@
 #################################################
 # HelloID-Conn-Prov-Target-SaltoSpace-Enable
 # PowerShell V2
-# TODO testing new active process this: (on enable)
-# dtActivation: Today
-# dtExpiration: Empty or far in the future (test)
 #################################################
 
 # Enable TLS1.2
@@ -188,6 +185,10 @@ try {
     if (($correlatedAccount | Measure-Object).count -eq 1) {
         $actionMessage = "comparing current account to mapped properties"
 
+        # Change NULL to Empty to make a correct compare
+        $correlatedAccount.PSObject.Properties | ForEach-Object { if ($null -eq $_.Value -or $_.Value -eq 'NULL') { $_.Value = "" } }
+        $account.PSObject.Properties | ForEach-Object { if ($null -eq $_.Value -or $_.Value -eq 'NULL') { $_.Value = "" } }
+
         # Set Previous data (if there are no changes between PreviousData and Data, HelloID will log "update finished with no changes")
         $outputContext.PreviousData = $correlatedAccount.PsObject.Copy()
 
@@ -236,7 +237,7 @@ try {
 
             foreach ($accountNewProperty in $accountNewProperties) {
                 # Define the value, handling nulls and escaping single quotes
-                $value = if ([String]::IsNullOrEmpty($accountNewProperty.Value)) {
+                $value = if (([String]::IsNullOrEmpty($accountNewProperty.Value)) -or $accountNewProperty.Value -eq 'NULL') {
                     'NULL'
                 }
                 else {

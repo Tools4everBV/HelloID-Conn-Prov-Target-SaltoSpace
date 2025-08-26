@@ -254,7 +254,7 @@
                         "Create"
                     ],
                     "MappingMode": "Fixed",
-                    "Value": "\"12/31/2099 00:00:00\"",
+                    "Value": "\"12/01/2099 00:00:00\"",
                     "UsedInNotifications": false,
                     "StoreInAccountData": false
                 },
@@ -280,7 +280,7 @@
                         "Enable"
                     ],
                     "MappingMode": "Fixed",
-                    "Value": "\"\"",
+                    "Value": "\"NULL\"",
                     "UsedInNotifications": false,
                     "StoreInAccountData": false
                 },

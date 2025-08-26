@@ -1,6 +1,5 @@
 #################################################
 # HelloID-Conn-Prov-Target-SaltoSpace-Permissions-Groups-Import
-# TODO: drycoded
 # PowerShell V2
 #################################################
 
@@ -174,8 +173,7 @@ try {
     }
     $getSaltoMembershipsResponse = [System.Collections.ArrayList]::new()
     Invoke-SQLQuery @getSaltoMembershipsSplatParams -Data ([ref]$getSaltoMembershipsResponse)
-    $saltoGroupsFiltered = $getSaltoGroupResponse | Where-Object { ($_.User_ExtID -ne $null -and $_.User_ExtID -ne '') -and ($_.Group_ExtID -ne $null -and $_.Group_ExtID -ne '') }
-    $saltoMembershipsGrouped = $saltoGroupsFiltered | Group-Object -Property 'Group_ExtID' -AsHashTable -AsString
+    $saltoMembershipsGrouped = $getSaltoMembershipsResponse | Group-Object -Property 'Group_ExtID' -AsHashTable -AsString
     Write-Information "Successfully queried [$($saltoGroupsFiltered.count)] existing memberships"
 
     foreach ($permission in $saltoGroupsFiltered) {

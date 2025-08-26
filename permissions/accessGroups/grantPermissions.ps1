@@ -145,8 +145,7 @@ try {
         if (-Not($actionContext.DryRun -eq $true)) {
             $grantPermissionResponse = [System.Collections.ArrayList]::new()
             Invoke-SQLQuery @grantPermissionSplatParams -Data ([ref]$grantPermissionResponse)
-
-            #Het zou mooi zijn om hier een woordje te gebruiken wat niet in de skipped melding staat, anders kan je de filter optie in de audit log weergave niet gebruiken om te zien wat er echt is toegevoegd
+            
             $outputContext.AuditLogs.Add([PSCustomObject]@{
                     # Action  = "" # Optional
                     Message = "Granted group [$($actionContext.References.Permission.Name)] with ExtID [$($actionContext.References.Permission.ExtID)] to account with AccountReference: $($actionContext.References.Account | ConvertTo-Json)."

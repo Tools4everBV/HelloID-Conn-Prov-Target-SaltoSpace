@@ -184,6 +184,10 @@ try {
     if (($correlatedAccount | Measure-Object).count -eq 1) {
         $actionMessage = "comparing current account to mapped properties"
 
+        # Change NULL to Empty to make a correct compare
+        $correlatedAccount.PSObject.Properties | ForEach-Object { if ($null -eq $_.Value -or $_.Value -eq 'NULL') { $_.Value = "" } }
+        $account.PSObject.Properties | ForEach-Object { if ($null -eq $_.Value -or $_.Value -eq 'NULL') { $_.Value = "" } }
+
         # Set Previous data (if there are no changes between PreviousData and Data, HelloID will log "update finished with no changes")
         $outputContext.PreviousData = $correlatedAccount.PsObject.Copy()
 
@@ -214,11 +218,8 @@ try {
         Write-Information "Compared current account to mapped properties. Result: $actionAccount"
     }
     elseif (($correlatedAccount | Measure-Object).count -eq 0) {
-        $actionAccount = "NotFound"
-        if ($actionContext.AccountCorrelated -eq $true) {
-            Write-Information 'Inserting record in staging database after import account data'
-            $actionAccount = "Create"
-        }
+        # NotFound replaced by Create because import account entitlements can be used
+        $actionAccount = "Create"
     }
     elseif (($correlatedAccount | Measure-Object).count -gt 1) {
         $actionAccount = "MultipleFound"
@@ -231,8 +232,9 @@ try {
             #region Create account
             $actionMessage = "creating account with FirstName [$($account.FirstName)] and LastName [$($account.LastName)]"
 
-            # Set ExtId with ExtID of user in Salto DB
+            # Set ExtId with ExtID of user in Salto DB and Add dtActivation (same value as create)
             $account | Add-Member -NotePropertyName 'ExtId' -NotePropertyValue $actionContext.References.Account -Force
+            $account | Add-Member -NotePropertyName 'dtActivation' -NotePropertyValue '12/01/2099 00:00:00' -Force
 
             $createAccountSplatParams = @{
                 ConnectionString = $actionContext.Configuration.connectionStringStaging
@@ -242,7 +244,7 @@ try {
                 INSERT INTO
                     [dbo].[$($actionContext.Configuration.dbTableStaging)] ([$($account.PSObject.Properties.Name -join "],[")],[ToBeProcessedBySalto])
                 VALUES
-                    ($($account.PSObject.Properties.Value.ForEach({ if ($_ -eq $null) { 'NULL' } else { '''' + $_.Replace("'", "''") + '''' } }) -join ', '),'1')
+                    ($($account.PSObject.Properties.Value.ForEach({ if (($_ -eq $null -or $_ -eq 'NULL')) { 'NULL' } else { '''' + $_.Replace("'", "''") + '''' } }) -join ', '),'1')
                 "
                 Verbose          = $false
                 ErrorAction      = "Stop"
@@ -256,6 +258,7 @@ try {
 
                 # Add AccountReference to Data
                 $outputContext.Data | Add-Member -MemberType NoteProperty -Name "ExtId" -Value "$($account.ExtId)" -Force
+                $outputContext.PreviousData = $null
 
                 $outputContext.AuditLogs.Add([PSCustomObject]@{
                         # Action  = "" # Optional
@@ -280,7 +283,7 @@ try {
 
             foreach ($accountNewProperty in $accountNewProperties) {
                 # Define the value, handling nulls and escaping single quotes
-                $value = if ([String]::IsNullOrEmpty($accountNewProperty.Value)) {
+                $value = if (([String]::IsNullOrEmpty($accountNewProperty.Value)) -or $accountNewProperty.Value -eq 'NULL') {
                     'NULL'
                 }
                 else {
@@ -340,17 +343,6 @@ try {
                     IsError = $false
                 })
             #endregion No changes
-
-            break
-        }
-
-        "NotFound" {
-            #region No account found
-            $actionMessage = "updating account"
-
-            # Throw terminal error
-            throw "No account found where [$($correlationField)] = [$($correlationValue)]."
-            #endregion No account found
 
             break
         }

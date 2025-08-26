@@ -44,14 +44,14 @@
 
 The following features are available:
 
-| Feature                                   | Supported | Actions                                 | Remarks                                                                                                                                         |
-| ----------------------------------------- | --------- | --------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Account Lifecycle**                     | ✅         | Create, Update, Enable, Disable, Delete | (WIP) Enable and Disable are managed by setting `dtActivation` and `dtExpiration`.                                                              |
-| **Permissions**                           | ✅         | Retrieve, Grant, Revoke                 | (WIP) Importing permissions requires to add the Grant script in de Update script.                                                               |
-| **Resources**                             | ❌         | -                                       |                                                                                                                                                 |
-| **Entitlement Import: Accounts**          | ✅         | -                                       |                                                                                                                                                 |
-| **Entitlement Import: Permissions**       | ✅         | -                                       | (WIP) Importing permissions requires to add the Grant script in de Update script.                                                               |
-| **Governance Reconciliation Resolutions** | ✅         | -                                       | (WIP) Actions to the system with reconciliation are not supported because HelloID only manages the staging database and not the Salto Database. |
+| Feature                                   | Supported | Actions                                 | Remarks                                                                                                                                   |
+| ----------------------------------------- | --------- | --------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
+| **Account Lifecycle**                     | ✅         | Create, Update, Enable, Disable, Delete | Enable and Disable are managed by setting `dtActivation` and `dtExpiration`.                                                              |
+| **Permissions**                           | ✅         | Retrieve, Grant, Revoke                 | Importing permissions requires to add the Grant script in de Update script.                                                               |
+| **Resources**                             | ❌         | -                                       |                                                                                                                                           |
+| **Entitlement Import: Accounts**          | ✅         | -                                       | Recommend after using the import account entitlements to only run de update account to prevent errors and dependency problems.            |
+| **Entitlement Import: Permissions**       | ✅         | -                                       | Importing permissions requires to add the Grant script in de Update script.                                                               |
+| **Governance Reconciliation Resolutions** | ✅         | -                                       | Actions to the system with reconciliation are not supported because HelloID only manages the staging database and not the Salto Database. |
 
 ## Requirements
 
@@ -68,7 +68,7 @@ The following features are available:
      - If necessary, an SQL-only user can be used, though it offers lower security.
 
 3. **Salto Import Job**:
-   - **Configuration**: The Salto import job needs to be set up. For detailed configuration steps, refer to the Salto Systems support guide: [Salto Import Job Setup](https://support.saltosystems.com/space/user-guide/operator/tools/creating-scheduled-jobs/#automatic-database-table-synchronization).
+   - **Configuration**: The Salto import job needs to be set up. For detailed configuration steps, refer to the Salto Systems support guide: [Salto Import Job Setup](https://support.saltosystems.com/space/user-guide/operator/tools/creating-scheduled-jobs/#automatic-database-table-synchronization). At mapping configuration use the same sequence as used in ([createStagingDBTable.sql](/assets/createStagingDBTable.sql))
 
 4. **HelloID Concurrent Sessions**:
    - **Session Limit**: Set the maximum number of concurrent sessions in HelloID to 1. Exceeding this limit can cause unexpected issues, such as permissions being overwritten or not properly assigned.

@@ -1,9 +1,6 @@
 #################################################
 # HelloID-Conn-Prov-Target-SaltoSpace-Create
 # PowerShell V2
-# TODO testing new active process this: (on create)
-# dtActivation: Far in the future
-# dtExpiration: Empty
 #################################################
 
 # Enable TLS1.2
@@ -241,7 +238,12 @@ try {
     $actionMessage = "calculating action"
 
     if (($correlatedAccount | Measure-Object).count -eq 1) {
-        $actionAccount = "Correlate"
+        if (($getSaltoAccountResponse | Measure-Object).count -eq 1) {
+            $actionAccount = "Correlate"
+        }
+        else {
+            $actionAccount = "Create-Update"
+        }
     }
     elseif (($correlatedAccount | Measure-Object).count -eq 0 -or [string]::IsNullOrEmpty($getSaltoAccountResponse.ExtId)) {
         $actionAccount = "Create"
@@ -273,7 +275,7 @@ try {
                 INSERT INTO
                     [dbo].[$($actionContext.Configuration.dbTableStaging)] ([$($account.PSObject.Properties.Name -join "],[")],[ToBeProcessedBySalto])
                 VALUES
-                    ($($account.PSObject.Properties.Value.ForEach({ if ($_ -eq $null) { 'NULL' } else { '''' + $_.Replace("'", "''") + '''' } }) -join ', '),'1')
+                    ($($account.PSObject.Properties.Value.ForEach({ if (($_ -eq $null -or $_ -eq 'NULL')) { 'NULL' } else { '''' + $_.Replace("'", "''") + '''' } }) -join ', '),'1')
                 "
                 Verbose          = $false
                 ErrorAction      = "Stop"
@@ -299,6 +301,65 @@ try {
                 Write-Warning "DryRun: Would create account with FirstName [$($account.FirstName)], LastName [$($account.LastName)] and ExtId [$($account.ExtId)]."
             }
             #endregion Create account
+
+            break
+        }
+
+        "Create-Update" {
+            #region Update account
+            $actionMessage = "create-updating account with AccountReference: $($correlatedAccount.ExtId | ConvertTo-Json)" 
+            $outputContext.AccountReference = "$($correlatedAccount.ExtId)"  
+
+            # Create a list of properties to update
+            $updatePropertiesList = [System.Collections.Generic.List[string]]::new()
+            $accountNewProperties = $account | Select-Object -ExcludeProperty 'ExtId'
+            Write-Warning "$($accountNewProperties | ConvertTo-Json)"
+            foreach ($accountNewProperty in $accountNewProperties.PSObject.Properties) {
+                # Define the value, handling nulls and escaping single quotes
+                $value = if (([String]::IsNullOrEmpty($accountNewProperty.Value)) -or $accountNewProperty.Value -eq 'NULL') {
+                    'NULL'
+                }
+                else {
+                    "'$($accountNewProperty.Value -replace "'", "''")'"
+                }
+
+                # Add the property to the list
+                $updatePropertiesList.Add("[$($accountNewProperty.Name)] = $value")
+            }
+
+            $updateAccountSplatParams = @{
+                ConnectionString = $actionContext.Configuration.connectionStringStaging
+                Username         = $actionContext.Configuration.username
+                Password         = $actionContext.Configuration.password
+                SqlQuery         = "
+                UPDATE
+                    [dbo].[$($actionContext.Configuration.dbTableStaging)]
+                SET
+                    $(if(-NOT [string]::IsNullOrEmpty($updatePropertiesList)){($updatePropertiesList -join ',') + ','})
+                    [ToBeProcessedBySalto] = '1'
+                WHERE
+                    [ExtId] = '$($correlatedAccount.ExtId)'
+                "
+                Verbose          = $false
+                ErrorAction      = "Stop"
+            }
+
+            Write-Information "SQL Query: $($updateAccountSplatParams.SqlQuery | Out-String)"
+
+            if (-Not($actionContext.DryRun -eq $true)) {
+                $updateAccountResponse = [System.Collections.ArrayList]::new()
+                Invoke-SQLQuery @updateAccountSplatParams -Data ([ref]$updateAccountResponse)
+
+                $outputContext.AuditLogs.Add([PSCustomObject]@{
+                        # Action  = "" # Optional
+                        Message = "Created account with FirstName [$($account.FirstName)] and LastName [$($account.LastName)] with AccountReference: $($outputContext.AccountReference | ConvertTo-Json). Updated staging DB."
+                        IsError = $false
+                    })
+            }
+            else {
+                Write-Warning "DryRun: Would create account with FirstName [$($account.FirstName)] and LastName [$($account.LastName)] with AccountReference: $($outputContext.AccountReference | ConvertTo-Json). Would update staging DB."
+            }
+            #endregion Update account
 
             break
         }

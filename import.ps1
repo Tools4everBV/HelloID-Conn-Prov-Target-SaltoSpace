@@ -1,6 +1,5 @@
 #################################################
 # HelloID-Conn-Prov-Target-SaltoSpace-Import
-# TODO: drycoded
 # PowerShell V2
 #################################################
 
@@ -160,7 +159,7 @@ try {
             $isActive = ($now -ge $dtActivation)
         }
 
-        $displayName = $account.FirstName + ' ' + $account.LastName
+        $displayName = ($account.FirstName + ' ' + $account.LastName).Trim()
         if ([string]::IsNullOrEmpty($displayName)) {
             $displayName = $account.ExtID
         }

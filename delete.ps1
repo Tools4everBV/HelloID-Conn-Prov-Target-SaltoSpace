@@ -1,7 +1,6 @@
 #################################################
 # HelloID-Conn-Prov-Target-SaltoSpace-Delete
 # PowerShell V2
-# TODO: If not sending a delete but a disable. Readme note to configure the same as disable
 #################################################
 
 # Enable TLS1.2

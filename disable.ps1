@@ -1,9 +1,6 @@
 #################################################
 # HelloID-Conn-Prov-Target-SaltoSpace-Disable
 # PowerShell V2
-# TODO testing new active process this: (on disable)
-# dtActivation: Don't update
-# dtExpiration: Yesterday
 #################################################
 
 # Enable TLS1.2
@@ -144,6 +141,10 @@ try {
 
     # Define properties to compare for update
     $accountPropertiesToCompare = $account.PsObject.Properties.Name | Select-Object -ExcludeProperty 'ToBeProcessedBySalto'
+
+    # Define properties to query (to make sure active is queried)
+    $accountPropertiesToQuery = $account.PsObject.Properties.Name
+    if ('dtActivation' -notin $accountPropertiesToQuery) { $accountPropertiesToQuery += 'dtActivation' }
     #endRegion account
 
     #region Verify account reference
@@ -163,7 +164,7 @@ try {
         Password         = $actionContext.Configuration.password
         SqlQuery         = "
         SELECT
-            [$($account.PSObject.Properties.Name -join "],[")]
+            [$($accountPropertiesToQuery -join "],[")]
         FROM
             [dbo].[$($actionContext.Configuration.dbTableStaging)]
         WHERE
@@ -190,6 +191,20 @@ try {
     $actionMessage = "calculating action"
     if (($correlatedAccount | Measure-Object).count -eq 1) {
         $actionMessage = "comparing current account to mapped properties"
+
+        # Make sure new dtExpiration > current dtActivation
+        $dtExpiration = [datetime]::Parse($account.dtExpiration)
+        $dtActivation = [datetime]::Parse($correlatedAccount.dtActivation)
+        if ($dtExpiration -le $dtActivation) {
+            $dtActivation = $dtExpiration.AddDays(-1)
+            $account | Add-Member -NotePropertyName 'dtActivation' -NotePropertyValue ($dtActivation.AddDays(-1).ToString('MM/dd/yyyy HH:mm:ss'))
+            Write-Warning "Current dtActivation [$($correlatedAccount.dtActivation)] is later then new dtExpiration [$($account.dtExpiration)] changed dtActivation to [$($account.dtActivation)]"
+            if ('dtActivation' -notin $accountPropertiesToCompare) { $accountPropertiesToCompare += 'dtActivation' }
+        }
+
+        # Change NULL to Empty to make a correct compare
+        $correlatedAccount.PSObject.Properties | ForEach-Object { if ($null -eq $_.Value -or $_.Value -eq 'NULL') { $_.Value = "" } }
+        $account.PSObject.Properties | ForEach-Object { if ($null -eq $_.Value -or $_.Value -eq 'NULL') { $_.Value = "" } }
 
         # Set Previous data (if there are no changes between PreviousData and Data, HelloID will log "update finished with no changes")
         $outputContext.PreviousData = $correlatedAccount.PsObject.Copy()
@@ -239,7 +254,7 @@ try {
 
             foreach ($accountNewProperty in $accountNewProperties) {
                 # Define the value, handling nulls and escaping single quotes
-                $value = if ([String]::IsNullOrEmpty($accountNewProperty.Value)) {
+                $value = if (([String]::IsNullOrEmpty($accountNewProperty.Value)) -or $accountNewProperty.Value -eq 'NULL') {
                     'NULL'
                 }
                 else {
