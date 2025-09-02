@@ -129,7 +129,7 @@ function ConvertTo-FlatObject {
 try {
     #region account
     # Define correlation
-    $correlationField = "ExtId"
+    $correlationField = "ExtID"
     $correlationValue = $actionContext.References.Account
 
     # Define account object
@@ -189,17 +189,11 @@ try {
         $account.PSObject.Properties | ForEach-Object { if ($null -eq $_.Value -or $_.Value -eq 'NULL') { $_.Value = "" } }
 
         # Set Previous data (if there are no changes between PreviousData and Data, HelloID will log "update finished with no changes")
-        $outputContext.PreviousData = $correlatedAccount.PsObject.Copy()
-
-        # Create reference object from correlated account
-        $accountReferenceObject = $correlatedAccount.PsObject.Copy()
-
-        # Create difference object from mapped properties
-        $accountDifferenceObject = $account.PsObject.Copy()
+        $outputContext.PreviousData = $correlatedAccount
 
         $accountSplatCompareProperties = @{
-            ReferenceObject  = $accountReferenceObject.PSObject.Properties | Where-Object { $_.Name -in $accountPropertiesToCompare }
-            DifferenceObject = $accountDifferenceObject.PSObject.Properties | Where-Object { $_.Name -in $accountPropertiesToCompare }
+            ReferenceObject  = $correlatedAccount.PSObject.Properties | Where-Object { $_.Name -in $accountPropertiesToCompare }
+            DifferenceObject = $account.PSObject.Properties | Where-Object { $_.Name -in $accountPropertiesToCompare }
         }
 
         if ($null -ne $accountSplatCompareProperties.ReferenceObject -and $null -ne $accountSplatCompareProperties.DifferenceObject) {
@@ -230,11 +224,45 @@ try {
     switch ($actionAccount) {
         "Create" {
             #region Create account
+            $actionMessage = "querying account where [$($correlationField)] = [$($correlationValue)] from Salto DB"
+
+            $getSaltoAccountSplatParams = @{
+                ConnectionString = $actionContext.Configuration.connectionStringSalto
+                Username         = $actionContext.Configuration.username
+                Password         = $actionContext.Configuration.password
+                SqlQuery         = "
+                SELECT
+                    tb_Users.dtActivation
+                FROM
+                    [dbo].[tb_Users]
+                    INNER JOIN [dbo].[tb_Users_Ext] ON tb_Users.id_user = tb_Users_Ext.id_user
+                WHERE
+                    [$correlationField] = '$correlationValue'
+                "
+                Verbose          = $false
+                ErrorAction      = "Stop"
+            }
+
+            Write-Information "SQL Query: $($getSaltoAccountSplatParams.SqlQuery | Out-String)"
+
+            $getSaltoAccountResponse = [System.Collections.ArrayList]::new()
+            Invoke-SQLQuery @getSaltoAccountSplatParams -Data ([ref]$getSaltoAccountResponse)
+
+            Write-Information "Queried account where [$($correlationField)] = [$($correlationValue)] from Salto DB. Result: $($getSaltoAccountResponse | ConvertTo-Json)"
+
+            # Make sure to use the same Activation date that is used in Salto
+            if (($getSaltoAccountResponse | Measure-Object).count -gt 0) {
+                $getSaltoAccountResponse = ConvertTo-FlatObject -Object $getSaltoAccountResponse
+                $account | Add-Member -NotePropertyName 'dtActivation' -NotePropertyValue $getSaltoAccountResponse.dtActivation -Force
+            }
+            else {
+                $account | Add-Member -NotePropertyName 'dtActivation' -NotePropertyValue '12/01/2099 00:00:00' -Force
+            }
+
             $actionMessage = "creating account with FirstName [$($account.FirstName)] and LastName [$($account.LastName)]"
 
-            # Set ExtId with ExtID of user in Salto DB and Add dtActivation (same value as create)
-            $account | Add-Member -NotePropertyName 'ExtId' -NotePropertyValue $actionContext.References.Account -Force
-            $account | Add-Member -NotePropertyName 'dtActivation' -NotePropertyValue '12/01/2099 00:00:00' -Force
+            # Set ExtID with ExtID of user in Salto DB
+            $account | Add-Member -NotePropertyName 'ExtID' -NotePropertyValue $actionContext.References.Account -Force
 
             $createAccountSplatParams = @{
                 ConnectionString = $actionContext.Configuration.connectionStringStaging
@@ -256,8 +284,6 @@ try {
                 $createAccountResponse = [System.Collections.ArrayList]::new()
                 Invoke-SQLQuery @createAccountSplatParams -Data ([ref]$createAccountResponse)
 
-                # Add AccountReference to Data
-                $outputContext.Data | Add-Member -MemberType NoteProperty -Name "ExtId" -Value "$($account.ExtId)" -Force
                 $outputContext.PreviousData = $null
 
                 $outputContext.AuditLogs.Add([PSCustomObject]@{
@@ -267,7 +293,7 @@ try {
                     })
             }
             else {
-                Write-Warning "DryRun: Would staging DB record with FirstName [$($account.FirstName)], LastName [$($account.LastName)] and ExtId [$($account.ExtId)]."
+                Write-Warning "DryRun: Would staging DB record with FirstName [$($account.FirstName)], LastName [$($account.LastName)] and ExtID [$($account.ExtID)]."
             }
             #endregion Create account
 
@@ -305,7 +331,7 @@ try {
                     $(if(-NOT [string]::IsNullOrEmpty($updatePropertiesList)){($updatePropertiesList -join ',') + ','})
                     [ToBeProcessedBySalto] = '1'
                 WHERE
-                    [ExtId] = '$($actionContext.References.Account)'
+                    [ExtID] = '$($actionContext.References.Account)'
                 "
                 Verbose          = $false
                 ErrorAction      = "Stop"
@@ -335,7 +361,7 @@ try {
             #region No changes
             $actionMessage = "skipping updating account"
 
-            $outputContext.Data = $correlatedAccount.PsObject.Copy()
+            $outputContext.Data = $correlatedAccount
 
             $outputContext.AuditLogs.Add([PSCustomObject]@{
                     # Action  = "" # Optional

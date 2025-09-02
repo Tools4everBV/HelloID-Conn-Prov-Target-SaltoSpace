@@ -120,9 +120,6 @@ try {
             @{
                 displayName    = $displayName
                 identification = @{
-                    Id          = $_.Id_Group
-                    Name        = $_.Name
-                    Description = $_.Description
                     ExtID       = $_.ExtID
                 }
             }

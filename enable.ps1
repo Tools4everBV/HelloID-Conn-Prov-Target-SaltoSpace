@@ -129,7 +129,7 @@ function ConvertTo-FlatObject {
 try {
     #region account
     # Define correlation
-    $correlationField = "ExtId"
+    $correlationField = "ExtID"
     $correlationValue = $actionContext.References.Account
 
     # Define account object
@@ -259,7 +259,7 @@ try {
                     $(if(-NOT [string]::IsNullOrEmpty($updatePropertiesList)){($updatePropertiesList -join ',') + ','})
                     [ToBeProcessedBySalto] = '1'
                 WHERE
-                    [ExtId] = '$($actionContext.References.Account)'
+                    [ExtID] = '$($actionContext.References.Account)'
                 "
                 Verbose          = $false
                 ErrorAction      = "Stop"

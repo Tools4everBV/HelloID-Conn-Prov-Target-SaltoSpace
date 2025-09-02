@@ -136,7 +136,7 @@ try {
     $account = $actionContext.Data
     # Make sure ExtID is always in $account
     if (-Not($account.PSObject.Properties.Name -Contains 'ExtID')) {
-        $account | Add-Member -NotePropertyName 'ExtId' -NotePropertyValue $null -Force
+        $account | Add-Member -NotePropertyName 'ExtID' -NotePropertyValue $null -Force
     }
     #endRegion account
 
@@ -196,15 +196,15 @@ try {
     }
     elseif (($getSaltoAccountResponse | Measure-Object).count -eq 1) {
         # Record found in Salto, check if record is available in staging
-        $extIdStaging = $getSaltoAccountResponse.ExtID
+        $ExtIDStaging = $getSaltoAccountResponse.ExtID
     }
     else {
         # Record not found in Salto, check if HelloID ExternalID is available in staging
-        $extIdStaging = $personContext.Person.ExternalId
+        $ExtIDStaging = $personContext.Person.ExternalId
     }
 
     #region Get account from Salto Staging DB
-    $actionMessage = "querying account where [ExtId] = [$extIdStaging] from Salto Staging DB"
+    $actionMessage = "querying account where [ExtID] = [$ExtIDStaging] from Salto Staging DB"
     $getSaltoStagingAccountSplatParams = @{
         ConnectionString = $actionContext.Configuration.connectionStringStaging
         Username         = $actionContext.Configuration.username
@@ -215,7 +215,7 @@ try {
         FROM
             [dbo].[$($actionContext.Configuration.dbTableStaging)]
         WHERE
-            [ExtId] = '$extIdStaging'
+            [ExtID] = '$ExtIDStaging'
         "
         Verbose          = $false
         ErrorAction      = "Stop"
@@ -226,7 +226,7 @@ try {
     $getSaltoStagingAccountResponse = [System.Collections.ArrayList]::new()
     Invoke-SQLQuery @getSaltoStagingAccountSplatParams -Data ([ref]$getSaltoStagingAccountResponse)
 
-    Write-Information  "Queried account where [ExtId] = [$($extIdStaging)] from Salto Staging DB. Result: $($getSaltoStagingAccountResponse | ConvertTo-Json)"
+    Write-Information  "Queried account where [ExtID] = [$($ExtIDStaging)] from Salto Staging DB. Result: $($getSaltoStagingAccountResponse | ConvertTo-Json)"
     #endregion Get account from Salto Staging DB
 
     $correlatedAccount = $getSaltoStagingAccountResponse
@@ -245,7 +245,7 @@ try {
             $actionAccount = "Create-Update"
         }
     }
-    elseif (($correlatedAccount | Measure-Object).count -eq 0 -or [string]::IsNullOrEmpty($getSaltoAccountResponse.ExtId)) {
+    elseif (($correlatedAccount | Measure-Object).count -eq 0 -or [string]::IsNullOrEmpty($getSaltoAccountResponse.ExtID)) {
         $actionAccount = "Create"
     }
     elseif (($correlatedAccount | Measure-Object).count -gt 1) {
@@ -259,7 +259,7 @@ try {
             #region Create account                  
             $actionMessage = "creating account with FirstName [$($account.FirstName)] and LastName [$($account.LastName)]"
 
-            # Set ExtId with ExtID of user in Salto DB, if not available, set with person externalId
+            # Set ExtID with ExtID of user in Salto DB, if not available, set with person externalId
             if (-not [string]::IsNullOrEmpty($getSaltoAccountResponse.ExtID)) {
                 $account.ExtID = $getSaltoAccountResponse.ExtID
             }
@@ -288,8 +288,8 @@ try {
                 Invoke-SQLQuery @createAccountSplatParams -Data ([ref]$createAccountResponse)
 
                 # Set AccountReference and add AccountReference to Data
-                $outputContext.AccountReference = "$($account.ExtId)"
-                $outputContext.Data | Add-Member -MemberType NoteProperty -Name "ExtId" -Value "$($account.ExtId)" -Force
+                $outputContext.AccountReference = "$($account.ExtID)"
+                $outputContext.Data | Add-Member -MemberType NoteProperty -Name "ExtID" -Value "$($account.ExtID)" -Force
 
                 $outputContext.AuditLogs.Add([PSCustomObject]@{
                         # Action  = "" # Optional
@@ -298,7 +298,7 @@ try {
                     })
             }
             else {
-                Write-Warning "DryRun: Would create account with FirstName [$($account.FirstName)], LastName [$($account.LastName)] and ExtId [$($account.ExtId)]."
+                Write-Warning "DryRun: Would create account with FirstName [$($account.FirstName)], LastName [$($account.LastName)] and ExtID [$($account.ExtID)]."
             }
             #endregion Create account
 
@@ -307,12 +307,13 @@ try {
 
         "Create-Update" {
             #region Update account
-            $actionMessage = "create-updating account with AccountReference: $($correlatedAccount.ExtId | ConvertTo-Json)" 
-            $outputContext.AccountReference = "$($correlatedAccount.ExtId)"  
+            $actionMessage = "create-updating account with AccountReference: $($correlatedAccount.ExtID | ConvertTo-Json)" 
+            $outputContext.AccountReference = "$($correlatedAccount.ExtID)"
+            $outputContext.Data | Add-Member -MemberType NoteProperty -Name "ExtID" -Value "$($correlatedAccount.ExtID)" -Force
 
             # Create a list of properties to update
             $updatePropertiesList = [System.Collections.Generic.List[string]]::new()
-            $accountNewProperties = $account | Select-Object -ExcludeProperty 'ExtId'
+            $accountNewProperties = $account | Select-Object -ExcludeProperty 'ExtID'
             Write-Warning "$($accountNewProperties | ConvertTo-Json)"
             foreach ($accountNewProperty in $accountNewProperties.PSObject.Properties) {
                 # Define the value, handling nulls and escaping single quotes
@@ -338,7 +339,7 @@ try {
                     $(if(-NOT [string]::IsNullOrEmpty($updatePropertiesList)){($updatePropertiesList -join ',') + ','})
                     [ToBeProcessedBySalto] = '1'
                 WHERE
-                    [ExtId] = '$($correlatedAccount.ExtId)'
+                    [ExtID] = '$($correlatedAccount.ExtID)'
                 "
                 Verbose          = $false
                 ErrorAction      = "Stop"
@@ -369,8 +370,8 @@ try {
             $actionMessage = "correlating to account"
 
             # Set AccountReference and add AccountReference to Data
-            $outputContext.AccountReference = "$($correlatedAccount.ExtId)"       
-            $outputContext.Data | Add-Member -MemberType NoteProperty -Name "ExtId" -Value "$($correlatedAccount.ExtId)" -Force
+            $outputContext.AccountReference = "$($correlatedAccount.ExtID)"       
+            $outputContext.Data | Add-Member -MemberType NoteProperty -Name "ExtID" -Value "$($correlatedAccount.ExtID)" -Force
 
             $outputContext.AuditLogs.Add([PSCustomObject]@{
                     Action  = "CorrelateAccount" # Optionally specify a different action for this audit log

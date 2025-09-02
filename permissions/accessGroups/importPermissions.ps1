@@ -174,7 +174,7 @@ try {
     $getSaltoMembershipsResponse = [System.Collections.ArrayList]::new()
     Invoke-SQLQuery @getSaltoMembershipsSplatParams -Data ([ref]$getSaltoMembershipsResponse)
     $saltoMembershipsGrouped = $getSaltoMembershipsResponse | Group-Object -Property 'Group_ExtID' -AsHashTable -AsString
-    Write-Information "Successfully queried [$($saltoGroupsFiltered.count)] existing memberships"
+    Write-Information "Successfully queried [$($getSaltoMembershipsResponse.count)] existing memberships"
 
     foreach ($permission in $saltoGroupsFiltered) {
         $matchingMemberships = $saltoMembershipsGrouped[$permission.Group_ExtID].User_ExtID
@@ -184,7 +184,7 @@ try {
                     $matchingMemberships
                 )
                 PermissionReference = @{
-                    Reference = $permission.Group_ExtID
+                    ExtID = $permission.Group_ExtID
                 }       
                 Description         = $permission.Name
                 DisplayName         = $permission.Description

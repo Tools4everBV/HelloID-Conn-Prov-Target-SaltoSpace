@@ -28,7 +28,7 @@ $personPropertiesToInclude = @($personCorrelationField, "Source.DisplayName") | 
 $contractPropertiesToInclude = @("ExternalId", "StartDate", "EndDate", "Department.DisplayName", "Department.ExternalId", "Title.Name", "Title.ExternalId", "Title.Code") | Sort-Object -Unique
 
 # Account fields from the target system to include in the report (must match exact names in the target system)
-$accountPropertiesToInclude = @("ExtId", "name", "FirstName", "LastName", "dtActivation", "dtExpiration") | Sort-Object -Unique
+$accountPropertiesToInclude = @("ExtID", "name", "FirstName", "LastName", "dtActivation", "dtExpiration") | Sort-Object -Unique
 
 # Optional parameters for checking against an evaluation report
 # Path to the Evaluation Report CSV (must be manually exported from a HelloID Provisioning evaluation)

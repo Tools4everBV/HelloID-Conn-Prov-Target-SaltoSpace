@@ -129,7 +129,7 @@ function ConvertTo-FlatObject {
 try {
     #region account
     # Define correlation
-    $correlationField = "ExtId"
+    $correlationField = "ExtID"
     $correlationValue = $actionContext.References.Account
 
     # Define account object
@@ -209,7 +209,7 @@ try {
                 UPDATE [dbo].[$($actionContext.Configuration.dbTableStaging)]
                 SET [Action] = '$($actionContext.data.Action)',
                     [ToBeProcessedBySalto] = '1'
-                WHERE [ExtId] = '$($actionContext.References.Account)'
+                WHERE [ExtID] = '$($actionContext.References.Account)'
                 "
                 Verbose          = $false
                 ErrorAction      = "Stop"
