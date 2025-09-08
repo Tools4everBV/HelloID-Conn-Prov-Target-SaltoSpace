@@ -186,8 +186,8 @@ try {
                 PermissionReference = @{
                     ExtID = $permission.Group_ExtID
                 }       
-                Description         = $permission.Name
-                DisplayName         = $permission.Description
+                Description         = $permission.Description
+                DisplayName         = $permission.Name
             }
         }
     }
