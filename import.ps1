@@ -153,7 +153,8 @@ try {
         $dtActivation = $account.dtActivation
         $now = Get-Date
         $isActive = ($now -ge $dtActivation -and $now -le $dtExpiration)
-        #TODO Checking if this fixed value is always returned when no end date is provided
+
+        # This setting may differ depending on your Salto configuration. Please adjust accordingly.
         if ($account.dtExpiration -eq '01/01/2000 00:00:00') {
             $account.dtExpiration = $null
             $isActive = ($now -ge $dtActivation)

@@ -5,7 +5,6 @@
 > **Why?** The original `GPF` fields were renamed to match their actual system (database) names. Keeping the database field names identical in the staging table reduces the need for additional mapping in scripts.  
 > This change does not affect Salto, as database fields must still be manually selected and mapped. However, please note that this update **breaks backward compatibility**. Upgrading to the latest version requires creating a new database table and reconfiguring the Salto Staging Schedule.  
 
-
 > [!WARNING]
 > This script is for the new powershell connector. Make sure to use the mapping and correlation keys like mentioned in this readme. For more information, please read our [documentation](https://docs.helloid.com/en/provisioning/target-systems/powershell-v2-target-systems.html)
 
@@ -25,7 +24,8 @@
   - [Requirements](#requirements)
   - [Remarks](#remarks)
     - [Unique Name Requirement](#unique-name-requirement)
-    - [`dtExpiration` Field](#dtexpiration-field)
+    - [Import account `dtExpiration`](#import-account-dtexpiration)
+    - [`dtExpiration` and `dtActivation` Field](#dtexpiration-and-dtactivation-field)
     - [`MobileAppType` Field](#mobileapptype-field)
     - [Staging Database Behavior](#staging-database-behavior)
   - [Introduction](#introduction)
@@ -49,7 +49,7 @@ The following features are available:
 | **Account Lifecycle**                     | ✅         | Create, Update, Enable, Disable, Delete | Enable and Disable are managed by setting `dtActivation` and `dtExpiration`.                                                              |
 | **Permissions**                           | ✅         | Retrieve, Grant, Revoke                 | Importing permissions requires to add the Grant script in de Update script.                                                               |
 | **Resources**                             | ❌         | -                                       |                                                                                                                                           |
-| **Entitlement Import: Accounts**          | ✅         | -                                       | Recommend after using the import account entitlements to only run de update account to prevent errors and dependency problems.            |
+| **Entitlement Import: Accounts**          | ✅         | -                                       | Recommend after using the import account entitlements to first run de update account to prevent errors and dependency problems.           |
 | **Entitlement Import: Permissions**       | ✅         | -                                       | Importing permissions requires to add the Grant script in de Update script.                                                               |
 | **Governance Reconciliation Resolutions** | ✅         | -                                       | Actions to the system with reconciliation are not supported because HelloID only manages the staging database and not the Salto Database. |
 
@@ -73,7 +73,6 @@ The following features are available:
 4. **HelloID Concurrent Sessions**:
    - **Session Limit**: Set the maximum number of concurrent sessions in HelloID to 1. Exceeding this limit can cause unexpected issues, such as permissions being overwritten or not properly assigned.
 
-
 ## Remarks
 
 ### Unique Name Requirement
@@ -81,9 +80,21 @@ The following features are available:
 - The `name` field in Salto must be unique and is built from the combination of `Title`, `FirstName`, and `LastName`.
 - To ensure uniqueness, it's recommended to include the employee ID in one of these fields.
 
-### `dtExpiration` Field
+### Import account `dtExpiration`
 
-- If the `dtExpiration` field is set to `null` or mapped as "none," no expiration date will be assigned to the entry. TODO
+- Importing account access correctly may vary depending on your Salto configuration. For example, an empty `dtExpiration` value in Salto might be stored as `01/01/2000 00:00:00` in the Salto database. Please validate the result and adjust accordingly.
+
+```Powershell
+# This setting may differ depending on your Salto configuration. Please adjust accordingly.
+if ($account.dtExpiration -eq '01/01/2000 00:00:00') {
+    $account.dtExpiration = $null
+    $isActive = ($now -ge $dtActivation)
+}
+```
+
+### `dtExpiration` and `dtActivation` Field
+
+- We recommend not changing the values `dtExpiration` and `dtActivation`, as account activation and deactivation are managed through `account access` entitlement.
 
 ### `MobileAppType` Field
 
@@ -93,7 +104,6 @@ The following features are available:
 
 - Since data is written to a staging database that Salto processes independently, HelloID is not informed of any errors that occur during Salto’s processing.
 - Additionally, any manual changes made directly in the Salto database will be overwritten during the next synchronization with the staging database.
-
 
 ## Introduction
 
@@ -129,7 +139,6 @@ The Salto import job needs to be configured. For detailed setup instructions, pl
 
 If you have any questions on this, please contact your Salto representative.
 
-
 ### Provisioning PowerShell V2 connector
 
 #### Correlation Configuration
@@ -145,6 +154,7 @@ To properly set up the correlation:
     | ----------------------------- | ------------ |
     | **Person Correlation Field**  | `ExternalId` |
     | **Account Correlation Field** | `Dummy2`     |
+
 > [!IMPORTANT]
 > The **Account Correlation Field** (`Dummy2`) is just an example. Make sure to change this accordingly.
 
@@ -157,15 +167,13 @@ The field mapping can be imported by using the _fieldMapping.json_ file.
 
 ### Connection Settings
 
-| Setting                                      | Description                                                                                                                                                                                                                    | Mandatory |
-| -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------- |
-| **Salto Database Connection string**         | The connection string used to connect to the Salto SQL database.                                                                                                                                                               | Yes       |
-| **Salto Staging Database Connection string** | The connection string used to connect to the Salto Staging SQL database.                                                                                                                                                       | Yes       |
-| **Salto staging table name**                 | The name of the Salto staging table.                                                                                                                                                                                           | Yes       |
-| **Username**                                 | Optional: The username of the SQL user to use in the connection string. Note: This cannot be used with `Trusted_Connection=True` in the connection string as it requires Windows Authentication.                               | No        |
-| **Password**                                 | Optional: The password of the SQL user to use in the connection string. Note: This cannot be used with `Trusted_Connection=True` in the connection string as it requires Windows Authentication.                               | No        |
-| **Toggle Correlate Only**                    | When enabled, accounts will only be correlated, and no new accounts will be created. If no matching account is found, an error will be raised. This is useful for environments where only existing accounts should be managed. | No        |
-| **Toggle debug logging**                     | Displays debug logging when toggled. **Switch off in production**                                                                                                                                                              | No        |
+| Setting                                      | Description                                                                                                                                                                                      | Mandatory |
+| -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------- |
+| **Salto Database Connection string**         | The connection string used to connect to the Salto SQL database.                                                                                                                                 | Yes       |
+| **Salto Staging Database Connection string** | The connection string used to connect to the Salto Staging SQL database.                                                                                                                         | Yes       |
+| **Salto staging table name**                 | The name of the Salto staging table.                                                                                                                                                             | Yes       |
+| **Username**                                 | Optional: The username of the SQL user to use in the connection string. Note: This cannot be used with `Trusted_Connection=True` in the connection string as it requires Windows Authentication. | No        |
+| **Password**                                 | Optional: The password of the SQL user to use in the connection string. Note: This cannot be used with `Trusted_Connection=True` in the connection string as it requires Windows Authentication. | No        |
 
 ## Getting help
 > [!TIP]
