@@ -7,14 +7,6 @@
 # Enable TLS1.2
 [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor [System.Net.SecurityProtocolType]::Tls12
 
-# Set debug logging
-switch ($actionContext.Configuration.isDebug) {
-    $true { $VerbosePreference = "Continue" }
-    $false { $VerbosePreference = "SilentlyContinue" }
-}
-$InformationPreference = "Continue"
-$WarningPreference = "Continue"
-
 #region functions
 function Invoke-SQLQuery {
     param(
@@ -56,7 +48,7 @@ function Invoke-SQLQuery {
             $SqlConnection.Credential = $sqlCredential
         }
         $SqlConnection.Open()
-        Write-Verbose "Successfully connected to SQL database" 
+        Write-Information "Successfully connected to SQL database" 
 
         # Set the query
         $SqlCmd = [System.Data.SqlClient.SqlCommand]::new()
@@ -82,12 +74,16 @@ function Invoke-SQLQuery {
         if ($SqlConnection.State -eq "Open") {
             $SqlConnection.close()
         }
-        Write-Verbose "Successfully disconnected from SQL database"
+        Write-Information "Successfully disconnected from SQL database"
     }
 }
 #endregion
 
 try {
+    if ($actionContext.Origin -eq 'reconciliation') {
+        throw  'Salto Space revoking permission is not supported with reconciliation. Skipping action.'
+    }
+
     #region Verify account reference
     $actionMessage = "verifying account reference"
     
@@ -97,7 +93,7 @@ try {
     #endregion Verify account reference
 
     #region Get Current Groups of account
-    $actionMessage = "querying current groups for account with ExtId [$($actionContext.References.Account | ConvertTo-Json)]"
+    $actionMessage = "querying current groups for account with ExtID [$($actionContext.References.Account | ConvertTo-Json)]"
 
     $getSaltoUserCurrentGroupsSplatParams = @{
         ConnectionString = $actionContext.Configuration.connectionStringStaging
@@ -105,37 +101,39 @@ try {
         Password         = $actionContext.Configuration.password
         SqlQuery         = "
         SELECT
+            ExtID,  
             ExtAccessLevelIDList
         FROM
             [dbo].[$($actionContext.Configuration.dbTableStaging)]
         WHERE
-            [ExtId] = '$($actionContext.References.Account)'
+            [ExtID] = '$($actionContext.References.Account)'
         "
         Verbose          = $false
         ErrorAction      = "Stop"
     }
 
-    Write-Verbose "SQL Query: $($getSaltoUserCurrentGroupsSplatParams.SqlQuery | Out-String)"
+    Write-Information "SQL Query: $($getSaltoUserCurrentGroupsSplatParams.SqlQuery | Out-String)"
 
     $getSaltoUserCurrentGroupsResponse = [System.Collections.ArrayList]::new()
     Invoke-SQLQuery @getSaltoUserCurrentGroupsSplatParams -Data ([ref]$getSaltoUserCurrentGroupsResponse)
-    $saltoUserCurrentGroups = $getSaltoUserCurrentGroupsResponse
+    $saltoUserCurrentGroups = $getSaltoUserCurrentGroupsResponse.ExtAccessLevelIDList
 
-    Write-Verbose "Queried current groups for account with ExtId [$($actionContext.References.Account | ConvertTo-Json)]. Result: $($saltoUserCurrentGroups | ConvertTo-Json)"
+    Write-Information "Queried current groups for account with ExtID [$($actionContext.References.Account | ConvertTo-Json)]. Result: $($getSaltoUserCurrentGroupsResponse | ConvertTo-Json)"
     #endregion Get Current Groups of account
 
-    if ($saltoUserCurrentGroups -notlike "*$($actionContext.References.Permission.ExtID)*") {
-        throw "User with ExtId [$($actionContext.References.Account)] is already no longer member of group [$($actionContext.References.Permission.Name)] with ExtID [$($actionContext.References.Permission.ExtID)]."
-    }
-    else {
-        #region Add account to group
-        $actionMessage = "revoking group [$($actionContext.References.Permission.Name)] with ExtID [$($actionContext.References.Permission.ExtID)] to account with AccountReference: $($actionContext.References.Account | ConvertTo-Json)"
+    if (-not [string]::IsNullOrEmpty($getSaltoUserCurrentGroupsResponse.ExtID)) {
+        if ($saltoUserCurrentGroups -notlike "*$($actionContext.References.Permission.ExtID)*") {
+            throw "User with ExtID [$($actionContext.References.Account)] is already no longer member of group [$($actionContext.PermissionDisplayName)] with ExtID [$($actionContext.References.Permission.ExtID)]."
+        }
+        else {
+            #region Add account to group
+            $actionMessage = "revoking group [$($actionContext.PermissionDisplayName)] with ExtID [$($actionContext.References.Permission.ExtID)] to account with AccountReference: $($actionContext.References.Account | ConvertTo-Json)"
 
-        $revokePermissionSplatParams = @{
-            ConnectionString = $actionContext.Configuration.connectionStringStaging
-            Username         = $actionContext.Configuration.username
-            Password         = $actionContext.Configuration.password
-            SqlQuery         = "
+            $revokePermissionSplatParams = @{
+                ConnectionString = $actionContext.Configuration.connectionStringStaging
+                Username         = $actionContext.Configuration.username
+                Password         = $actionContext.Configuration.password
+                SqlQuery         = "
             UPDATE
                 [dbo].[$($actionContext.Configuration.dbTableStaging)]
             SET
@@ -146,28 +144,36 @@ try {
                 END,
                 [ToBeProcessedBySalto] = '1'
             WHERE
-                [ExtId] = '$($actionContext.References.Account)'
+                [ExtID] = '$($actionContext.References.Account)'
             "
-            Verbose          = $false
-            ErrorAction      = "Stop"
-        }
+                Verbose          = $false
+                ErrorAction      = "Stop"
+            }
             
-        Write-Verbose "SQL Query: $($revokePermissionSplatParams.SqlQuery | Out-String)"
+            Write-Information "SQL Query: $($revokePermissionSplatParams.SqlQuery | Out-String)"
 
-        if (-Not($actionContext.DryRun -eq $true)) {
-            $revokePermissionResponse = [System.Collections.ArrayList]::new()
-            Invoke-SQLQuery @revokePermissionSplatParams -Data ([ref]$revokePermissionResponse)
+            if (-Not($actionContext.DryRun -eq $true)) {
+                $revokePermissionResponse = [System.Collections.ArrayList]::new()
+                Invoke-SQLQuery @revokePermissionSplatParams -Data ([ref]$revokePermissionResponse)
 
-            $outputContext.AuditLogs.Add([PSCustomObject]@{
-                    # Action  = "" # Optional
-                    Message = "Revoked group [$($actionContext.References.Permission.Name)] with ExtID [$($actionContext.References.Permission.ExtID)] to account with AccountReference: $($actionContext.References.Account | ConvertTo-Json)."
-                    IsError = $false
-                })
+                $outputContext.AuditLogs.Add([PSCustomObject]@{
+                        # Action  = "" # Optional
+                        Message = "Revoked group [$($actionContext.PermissionDisplayName)] with ExtID [$($actionContext.References.Permission.ExtID)] from account with AccountReference: $($actionContext.References.Account | ConvertTo-Json)."
+                        IsError = $false
+                    })
+            }
+            else {
+                Write-Warning "DryRun: Would revoke group [$($actionContext.PermissionDisplayName)] with ExtID [$($actionContext.References.Permission.ExtID)] from account with AccountReference: $($actionContext.References.Account | ConvertTo-Json)."
+            }
+            #endregion Add account to group
         }
-        else {
-            Write-Warning "DryRun: Would revoke group [$($actionContext.References.Permission.Name)] with ExtID [$($actionContext.References.Permission.ExtID)] to account with AccountReference: $($actionContext.References.Account | ConvertTo-Json)."
-        }
-        #endregion Add account to group
+    }
+    else {
+        $outputContext.AuditLogs.Add([PSCustomObject]@{
+                # Action  = "" # Optional
+                Message = "Skipped revoking group [$($actionContext.PermissionDisplayName)] with ExtID [$($actionContext.References.Permission.ExtID)] from account with AccountReference: $($actionContext.References.Account | ConvertTo-Json). Reason: Account not found, action skipped."
+                IsError = $false
+            })
     }
 }
 catch {
@@ -179,7 +185,7 @@ catch {
     if ($auditMessage -like "*already no longer member*") {
         $outputContext.AuditLogs.Add([PSCustomObject]@{
                 # Action  = "" # Optional
-                Message = "Skipped revoking group [$($actionContext.References.Permission.Name)] with ExtID [$($actionContext.References.Permission.ExtID)] to account with AccountReference: $($actionContext.References.Account | ConvertTo-Json). Reason: User is already no longer member of this group."
+                Message = "Skipped revoking group [$($actionContext.PermissionDisplayName)] with ExtID [$($actionContext.References.Permission.ExtID)] from account with AccountReference: $($actionContext.References.Account | ConvertTo-Json). Reason: User is already no longer member of this group."
                 IsError = $false
             })
     }

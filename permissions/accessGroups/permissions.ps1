@@ -7,14 +7,6 @@
 # Enable TLS1.2
 [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor [System.Net.SecurityProtocolType]::Tls12
 
-# Set debug logging
-switch ($actionContext.Configuration.isDebug) {
-    $true { $VerbosePreference = "Continue" }
-    $false { $VerbosePreference = "SilentlyContinue" }
-}
-$InformationPreference = "Continue"
-$WarningPreference = "Continue"
-
 #region functions
 function Invoke-SQLQuery {
     param(
@@ -56,7 +48,7 @@ function Invoke-SQLQuery {
             $SqlConnection.Credential = $sqlCredential
         }
         $SqlConnection.Open()
-        Write-Verbose "Successfully connected to SQL database" 
+        Write-Information "Successfully connected to SQL database" 
 
         # Set the query
         $SqlCmd = [System.Data.SqlClient.SqlCommand]::new()
@@ -82,7 +74,7 @@ function Invoke-SQLQuery {
         if ($SqlConnection.State -eq "Open") {
             $SqlConnection.close()
         }
-        Write-Verbose "Successfully disconnected from SQL database"
+        Write-Information "Successfully disconnected from SQL database"
     }
 }
 #endregion
@@ -109,7 +101,7 @@ try {
         ErrorAction      = "Stop"
     }
 
-    Write-Verbose "SQL Query: $($getSaltoGroupsSplatParams.SqlQuery | Out-String)"
+    Write-Information "SQL Query: $($getSaltoGroupsSplatParams.SqlQuery | Out-String)"
     
     $getSaltoGroupsResponse = [System.Collections.ArrayList]::new()
     Invoke-SQLQuery @getSaltoGroupsSplatParams -Data ([ref]$getSaltoGroupsResponse)
@@ -128,9 +120,6 @@ try {
             @{
                 displayName    = $displayName
                 identification = @{
-                    Id          = $_.Id_Group
-                    Name        = $_.Name
-                    Description = $_.Description
                     ExtID       = $_.ExtID
                 }
             }

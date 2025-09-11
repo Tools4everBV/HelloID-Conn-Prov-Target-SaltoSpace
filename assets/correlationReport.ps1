@@ -28,7 +28,7 @@ $personPropertiesToInclude = @($personCorrelationField, "Source.DisplayName") | 
 $contractPropertiesToInclude = @("ExternalId", "StartDate", "EndDate", "Department.DisplayName", "Department.ExternalId", "Title.Name", "Title.ExternalId", "Title.Code") | Sort-Object -Unique
 
 # Account fields from the target system to include in the report (must match exact names in the target system)
-$accountPropertiesToInclude = @("ExtId", "name", "FirstName", "LastName", "dtActivation", "dtExpiration") | Sort-Object -Unique
+$accountPropertiesToInclude = @("ExtID", "name", "FirstName", "LastName", "dtActivation", "dtExpiration") | Sort-Object -Unique
 
 # Optional parameters for checking against an evaluation report
 # Path to the Evaluation Report CSV (must be manually exported from a HelloID Provisioning evaluation)
@@ -45,14 +45,6 @@ $includeAllContracts = $false
 
 # Enable TLS1.2
 [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor [System.Net.SecurityProtocolType]::Tls12
-
-# Set debug logging
-switch ($actionContext.Configuration.isDebug) {
-    $true { $VerbosePreference = "Continue" }
-    $false { $VerbosePreference = "SilentlyContinue" }
-}
-$InformationPreference = "Continue"
-$WarningPreference = "Continue"
 
 #region functions
 function Invoke-SQLQuery {
@@ -95,7 +87,7 @@ function Invoke-SQLQuery {
             $SqlConnection.Credential = $sqlCredential
         }
         $SqlConnection.Open()
-        Write-Verbose "Successfully connected to SQL database" 
+        Write-Information "Successfully connected to SQL database" 
 
         # Set the query
         $SqlCmd = [System.Data.SqlClient.SqlCommand]::new()
@@ -121,7 +113,7 @@ function Invoke-SQLQuery {
         if ($SqlConnection.State -eq "Open") {
             $SqlConnection.close()
         }
-        Write-Verbose "Successfully disconnected from SQL database"
+        Write-Information "Successfully disconnected from SQL database"
     }
 }
 #endregion
@@ -180,7 +172,7 @@ try {
         ErrorAction      = "Stop"
     }
 
-    Write-Verbose "SQL query: $($getAccountsSplatParams.SqlQuery | Out-String)"
+    Write-Information "SQL query: $($getAccountsSplatParams.SqlQuery | Out-String)"
 
     $getAccountResponse = [System.Collections.ArrayList]::new()
     Invoke-SQLQuery @getAccountsSplatParams -Data ([ref]$getAccountResponse)
@@ -218,7 +210,7 @@ try {
         $account = $accountsGrouped["$($correlatedPersonObject.PersonCorrelationValue)"]
 
         if (($account | Measure-Object).Count -gt 1) {
-            Write-Verbose "Multiple accounts found where $($accountCorrelationField) = $($personCorrelationValue) for person $($person.DisplayName)"
+            Write-Information "Multiple accounts found where $($accountCorrelationField) = $($personCorrelationValue) for person $($person.DisplayName)"
         
             $correlatedPersonObject.AccountCorrelationWarning = "Multiple accounts found where $($accountCorrelationField) = $($correlatedPersonObject.PersonCorrelationValue)"
 

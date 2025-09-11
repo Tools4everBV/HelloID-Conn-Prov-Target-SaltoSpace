@@ -1,5 +1,5 @@
 #################################################
-# HelloID-Conn-Prov-Target-SaltoSpace-Update
+# HelloID-Conn-Prov-Target-SaltoSpace-Disable
 # PowerShell V2
 #################################################
 
@@ -128,15 +128,23 @@ function ConvertTo-FlatObject {
 
 try {
     #region account
+    if ($actionContext.Origin -eq 'reconciliation') {
+        throw  'Salto Space disabling account is not supported with reconciliation. Skipping action.'
+    }
     # Define correlation
     $correlationField = "ExtID"
     $correlationValue = $actionContext.References.Account
 
     # Define account object
-    $account = $actionContext.Data.PsObject.Copy()
+    $account = $actionContext.Data
     $account = ConvertTo-FlatObject -Object $account
 
+    # Define properties to compare for update
     $accountPropertiesToCompare = $account.PsObject.Properties.Name | Select-Object -ExcludeProperty 'ToBeProcessedBySalto'
+
+    # Define properties to query (to make sure active is queried)
+    $accountPropertiesToQuery = $account.PsObject.Properties.Name
+    if ('dtActivation' -notin $accountPropertiesToQuery) { $accountPropertiesToQuery += 'dtActivation' }
     #endRegion account
 
     #region Verify account reference
@@ -156,7 +164,7 @@ try {
         Password         = $actionContext.Configuration.password
         SqlQuery         = "
         SELECT
-            [$($account.PSObject.Properties.Name -join "],[")]
+            [$($accountPropertiesToQuery -join "],[")]
         FROM
             [dbo].[$($actionContext.Configuration.dbTableStaging)]
         WHERE
@@ -184,16 +192,32 @@ try {
     if (($correlatedAccount | Measure-Object).count -eq 1) {
         $actionMessage = "comparing current account to mapped properties"
 
+        # Make sure new dtExpiration > current dtActivation
+        $dtExpiration = [datetime]::Parse($account.dtExpiration)
+        $dtActivation = [datetime]::Parse($correlatedAccount.dtActivation)
+        if ($dtExpiration -le $dtActivation) {
+            $dtActivation = $dtExpiration.AddDays(-1)
+            $account | Add-Member -NotePropertyName 'dtActivation' -NotePropertyValue ($dtActivation.AddDays(-1).ToString('MM/dd/yyyy HH:mm:ss'))
+            Write-Warning "Current dtActivation [$($correlatedAccount.dtActivation)] is later then new dtExpiration [$($account.dtExpiration)] changed dtActivation to [$($account.dtActivation)]"
+            if ('dtActivation' -notin $accountPropertiesToCompare) { $accountPropertiesToCompare += 'dtActivation' }
+        }
+
         # Change NULL to Empty to make a correct compare
         $correlatedAccount.PSObject.Properties | ForEach-Object { if ($null -eq $_.Value -or $_.Value -eq 'NULL') { $_.Value = "" } }
         $account.PSObject.Properties | ForEach-Object { if ($null -eq $_.Value -or $_.Value -eq 'NULL') { $_.Value = "" } }
 
         # Set Previous data (if there are no changes between PreviousData and Data, HelloID will log "update finished with no changes")
-        $outputContext.PreviousData = $correlatedAccount
+        $outputContext.PreviousData = $correlatedAccount.PsObject.Copy()
+
+        # Create reference object from correlated account
+        $accountReferenceObject = $correlatedAccount.PsObject.Copy()
+
+        # Create difference object from mapped properties
+        $accountDifferenceObject = $account.PsObject.Copy()
 
         $accountSplatCompareProperties = @{
-            ReferenceObject  = $correlatedAccount.PSObject.Properties | Where-Object { $_.Name -in $accountPropertiesToCompare }
-            DifferenceObject = $account.PSObject.Properties | Where-Object { $_.Name -in $accountPropertiesToCompare }
+            ReferenceObject  = $accountReferenceObject.PSObject.Properties | Where-Object { $_.Name -in $accountPropertiesToCompare }
+            DifferenceObject = $accountDifferenceObject.PSObject.Properties | Where-Object { $_.Name -in $accountPropertiesToCompare }
         }
 
         if ($null -ne $accountSplatCompareProperties.ReferenceObject -and $null -ne $accountSplatCompareProperties.DifferenceObject) {
@@ -203,7 +227,7 @@ try {
 
         if ($accountNewProperties) {
             Write-Information "Changed properties: [$($accountNewProperties.name -join ',')]"
-            $actionAccount = "Update"
+            $actionAccount = "Disable"
         }
         else {
             $actionAccount = "NoChanges"
@@ -212,8 +236,7 @@ try {
         Write-Information "Compared current account to mapped properties. Result: $actionAccount"
     }
     elseif (($correlatedAccount | Measure-Object).count -eq 0) {
-        # NotFound replaced by Create because import account entitlements can be used
-        $actionAccount = "Create"
+        $actionAccount = "NotFound"
     }
     elseif (($correlatedAccount | Measure-Object).count -gt 1) {
         $actionAccount = "MultipleFound"
@@ -222,88 +245,10 @@ try {
 
     #region Process
     switch ($actionAccount) {
-        "Create" {
-            #region Create account
-            $actionMessage = "querying account where [$($correlationField)] = [$($correlationValue)] from Salto DB"
-
-            $getSaltoAccountSplatParams = @{
-                ConnectionString = $actionContext.Configuration.connectionStringSalto
-                Username         = $actionContext.Configuration.username
-                Password         = $actionContext.Configuration.password
-                SqlQuery         = "
-                SELECT
-                    tb_Users.dtActivation
-                FROM
-                    [dbo].[tb_Users]
-                    INNER JOIN [dbo].[tb_Users_Ext] ON tb_Users.id_user = tb_Users_Ext.id_user
-                WHERE
-                    [$correlationField] = '$correlationValue'
-                "
-                Verbose          = $false
-                ErrorAction      = "Stop"
-            }
-
-            Write-Information "SQL Query: $($getSaltoAccountSplatParams.SqlQuery | Out-String)"
-
-            $getSaltoAccountResponse = [System.Collections.ArrayList]::new()
-            Invoke-SQLQuery @getSaltoAccountSplatParams -Data ([ref]$getSaltoAccountResponse)
-
-            Write-Information "Queried account where [$($correlationField)] = [$($correlationValue)] from Salto DB. Result: $($getSaltoAccountResponse | ConvertTo-Json)"
-
-            # Make sure to use the same Activation date that is used in Salto
-            if (($getSaltoAccountResponse | Measure-Object).count -gt 0) {
-                $getSaltoAccountResponse = ConvertTo-FlatObject -Object $getSaltoAccountResponse
-                $account | Add-Member -NotePropertyName 'dtActivation' -NotePropertyValue $getSaltoAccountResponse.dtActivation -Force
-            }
-            else {
-                $account | Add-Member -NotePropertyName 'dtActivation' -NotePropertyValue '12/01/2099 00:00:00' -Force
-            }
-
-            $actionMessage = "creating account with FirstName [$($account.FirstName)] and LastName [$($account.LastName)]"
-
-            # Set ExtID with ExtID of user in Salto DB
-            $account | Add-Member -NotePropertyName 'ExtID' -NotePropertyValue $actionContext.References.Account -Force
-
-            $createAccountSplatParams = @{
-                ConnectionString = $actionContext.Configuration.connectionStringStaging
-                Username         = $actionContext.Configuration.username
-                Password         = $actionContext.Configuration.password
-                SqlQuery         = "
-                INSERT INTO
-                    [dbo].[$($actionContext.Configuration.dbTableStaging)] ([$($account.PSObject.Properties.Name -join "],[")],[ToBeProcessedBySalto])
-                VALUES
-                    ($($account.PSObject.Properties.Value.ForEach({ if (($_ -eq $null -or $_ -eq 'NULL')) { 'NULL' } else { '''' + $_.Replace("'", "''") + '''' } }) -join ', '),'1')
-                "
-                Verbose          = $false
-                ErrorAction      = "Stop"
-            }
-
-            Write-Information "SQL Query: $($createAccountSplatParams.SqlQuery | Out-String)"
-
-            if (-Not($actionContext.DryRun -eq $true)) {
-                $createAccountResponse = [System.Collections.ArrayList]::new()
-                Invoke-SQLQuery @createAccountSplatParams -Data ([ref]$createAccountResponse)
-
-                $outputContext.PreviousData = $null
-
-                $outputContext.AuditLogs.Add([PSCustomObject]@{
-                        # Action  = "" # Optional
-                        Message = "Created staging DB record with FirstName [$($account.FirstName)] and LastName [$($account.LastName)] with AccountReference: $($outputContext.AccountReference | ConvertTo-Json)."
-                        IsError = $false
-                    })
-            }
-            else {
-                Write-Warning "DryRun: Would staging DB record with FirstName [$($account.FirstName)], LastName [$($account.LastName)] and ExtID [$($account.ExtID)]."
-            }
-            #endregion Create account
-
-            break
-        }
-        
-        "Update" {
-            #region Update account
-            $actionMessage = "updating account with AccountReference: $($actionContext.References.Account | ConvertTo-Json)"
-
+        "Disable" {
+            #region Update account             
+            $actionMessage = "disabling account with AccountReference: $($actionContext.References.Account | ConvertTo-Json)"
+           
             # Create a list of properties to update
             $updatePropertiesList = [System.Collections.Generic.List[string]]::new()
 
@@ -345,37 +290,35 @@ try {
 
                 $outputContext.AuditLogs.Add([PSCustomObject]@{
                         # Action  = "" # Optional
-                        Message = "Updated account with AccountReference: $($outputContext.AccountReference | ConvertTo-Json), Account property(s) updated: [$($accountNewProperties.name -join ',')]"
+                        Message = "Disabled account with AccountReference: $($outputContext.AccountReference | ConvertTo-Json), Account property(s) updated: [$($accountNewProperties.name -join ',')]"
                         IsError = $false
                     })
             }
             else {
-                Write-Warning "DryRun: Would update account with AccountReference: $($outputContext.AccountReference | ConvertTo-Json), Account property(s) updated: [$($accountNewProperties.name -join ',')]"
+                Write-Warning "DryRun: Would disable account with AccountReference: $($outputContext.AccountReference | ConvertTo-Json), Account property(s) updated: [$($accountNewProperties.name -join ',')]"
             }
             #endregion Update account
 
             break
         }
 
-        "NoChanges" {
-            #region No changes
-            $actionMessage = "skipping updating account"
-
-            $outputContext.Data = $correlatedAccount
+        "NotFound" {
+            #region No account found
+            $actionMessage = "skipping disabling account"
 
             $outputContext.AuditLogs.Add([PSCustomObject]@{
                     # Action  = "" # Optional
-                    Message = "Skipped updating account with AccountReference: $($actionContext.References.Account | ConvertTo-Json). Reason: No changes."
+                    Message = "Could not disable account with AccountReference: $($outputContext.AccountReference | ConvertTo-Json). Account not found, action skipped."
                     IsError = $false
                 })
-            #endregion No changes
+            #endregion No account found
 
             break
         }
 
         "MultipleFound" {
             #region Multiple accounts found
-            $actionMessage = "updating account"
+            $actionMessage = "disabling account"
 
             # Throw terminal error
             throw "Multiple accounts found where [$($correlationField)] = [$($correlationValue)]. Please correct this to ensure the correlation results in a single unique account."

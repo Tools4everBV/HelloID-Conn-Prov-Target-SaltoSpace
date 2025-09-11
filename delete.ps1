@@ -6,14 +6,6 @@
 # Enable TLS1.2
 [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor [System.Net.SecurityProtocolType]::Tls12
 
-# Set debug logging
-switch ($actionContext.Configuration.isDebug) {
-    $true { $VerbosePreference = "Continue" }
-    $false { $VerbosePreference = "SilentlyContinue" }
-}
-$InformationPreference = "Continue"
-$WarningPreference = "Continue"
-
 #region functions
 function Invoke-SQLQuery {
     param(
@@ -55,7 +47,7 @@ function Invoke-SQLQuery {
             $SqlConnection.Credential = $sqlCredential
         }
         $SqlConnection.Open()
-        Write-Verbose "Successfully connected to SQL database" 
+        Write-Information "Successfully connected to SQL database" 
 
         # Set the query
         $SqlCmd = [System.Data.SqlClient.SqlCommand]::new()
@@ -81,7 +73,7 @@ function Invoke-SQLQuery {
         if ($SqlConnection.State -eq "Open") {
             $SqlConnection.close()
         }
-        Write-Verbose "Successfully disconnected from SQL database"
+        Write-Information "Successfully disconnected from SQL database"
     }
 }
 
@@ -137,10 +129,14 @@ function ConvertTo-FlatObject {
 try {
     #region account
     # Define correlation
-    $correlationField = "ExtId"
+    $correlationField = "ExtID"
     $correlationValue = $actionContext.References.Account
 
     # Define account object
+    if ($actionContext.Origin -eq 'reconciliation') {
+        throw  'Salto Space deleting account is not supported with reconciliation. Skipping action.'
+    }
+
     $account = [PSCustomObject]$actionContext.Data.PsObject.Copy()
     $account = ConvertTo-FlatObject -Object $account
     #endRegion account
@@ -172,12 +168,12 @@ try {
         ErrorAction      = "Stop"
     }
 
-    Write-Verbose "SQL Query: $($getSaltoStagingAccountSplatParams.SqlQuery | Out-String)"
+    Write-Information "SQL Query: $($getSaltoStagingAccountSplatParams.SqlQuery | Out-String)"
     
     $getSaltoStagingAccountResponse = [System.Collections.ArrayList]::new()
     Invoke-SQLQuery @getSaltoStagingAccountSplatParams -Data ([ref]$getSaltoStagingAccountResponse)
 
-    Write-Verbose "Queried account where [$correlationField] = [$correlationValue] from Salto Staging DB. Result: $($correlatedAccount | ConvertTo-Json)"
+    Write-Information "Queried account where [$correlationField] = [$correlationValue] from Salto Staging DB. Result: $($correlatedAccount | ConvertTo-Json)"
     #endregion Get account from Salto Staging DB
 
     $correlatedAccount = $getSaltoStagingAccountResponse
@@ -213,13 +209,13 @@ try {
                 UPDATE [dbo].[$($actionContext.Configuration.dbTableStaging)]
                 SET [Action] = '$($actionContext.data.Action)',
                     [ToBeProcessedBySalto] = '1'
-                WHERE [ExtId] = '$($actionContext.References.Account)'
+                WHERE [ExtID] = '$($actionContext.References.Account)'
                 "
                 Verbose          = $false
                 ErrorAction      = "Stop"
             }
         
-            Write-Verbose "SQL Query: $($deleteAccountSplatParams.SqlQuery | Out-String)"
+            Write-Information "SQL Query: $($deleteAccountSplatParams.SqlQuery | Out-String)"
 
             if (-Not($actionContext.DryRun -eq $true)) {
                 $deleteAccountResponse = [System.Collections.ArrayList]::new()
@@ -243,8 +239,11 @@ try {
             #region No account found
             $actionMessage = "skipping deleting account"
 
-            # Throw terminal error
-            throw "No account found where [$($correlationField)] = [$($correlationValue)]."
+            $outputContext.AuditLogs.Add([PSCustomObject]@{
+                    # Action  = "" # Optional
+                    Message = "Could not delete account with AccountReference: $($outputContext.AccountReference | ConvertTo-Json). Account not found, action skipped."
+                    IsError = $false
+                })
             #endregion No account found
 
             break

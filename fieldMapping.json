@@ -9,7 +9,9 @@
                 {
                     "MapForActions": [
                         "Create",
-                        "Update"
+                        "Enable",
+                        "Update",
+                        "Disable"
                     ],
                     "MappingMode": "Fixed",
                     "Value": "\"3\"",
@@ -62,7 +64,7 @@
         },
         {
             "Name": "Dummy1",
-            "Description": "General purpose field #1.",
+            "Description": "General purpose field #1. The maximum length of this field is 32 characters.",
             "Type": "Text",
             "MappingActions": [
                 {
@@ -79,7 +81,7 @@
         },
         {
             "Name": "Dummy2",
-            "Description": "General purpose field #2.",
+            "Description": "General purpose field #2. The maximum length of this field is 32 characters.",
             "Type": "Text",
             "MappingActions": [
                 {
@@ -96,7 +98,7 @@
         },
         {
             "Name": "Dummy3",
-            "Description": "General purpose field #3.",
+            "Description": "General purpose field #3. The maximum length of this field is 32 characters.",
             "Type": "Text",
             "MappingActions": [
                 {
@@ -104,7 +106,7 @@
                         "Create"
                     ],
                     "MappingMode": "None",
-                    "Value": "\"\"",
+                    "Value": "null",
                     "UsedInNotifications": false,
                     "StoreInAccountData": true
                 }
@@ -112,7 +114,7 @@
         },
         {
             "Name": "Dummy4",
-            "Description": "General purpose field #4.",
+            "Description": "General purpose field #4. The maximum length of this field is 32 characters.",
             "Type": "Text",
             "MappingActions": [
                 {
@@ -120,7 +122,7 @@
                         "Create"
                     ],
                     "MappingMode": "None",
-                    "Value": "\"\"",
+                    "Value": "null",
                     "UsedInNotifications": false,
                     "StoreInAccountData": true
                 }
@@ -128,7 +130,7 @@
         },
         {
             "Name": "Dummy5",
-            "Description": "General purpose field #5.",
+            "Description": "General purpose field #5. The maximum length of this field is 32 characters.",
             "Type": "Text",
             "MappingActions": [
                 {
@@ -136,7 +138,7 @@
                         "Create"
                     ],
                     "MappingMode": "None",
-                    "Value": "\"\"",
+                    "Value": "null",
                     "UsedInNotifications": false,
                     "StoreInAccountData": true
                 }
@@ -244,33 +246,52 @@
         },
         {
             "Name": "dtActivation",
-            "Description": "Starting date and time of the key in the format MM/DD/YYYY HH:MM:SS.\nExample: 06/31/2017 01:00:00.",
+            "Description": "Date and time of the key in the format MM/DD/YYYY HH:MM:SS.\nExample: 06/30/2017 00:00:00.\nCreate: Set the date far in the future to make sure the account is not active.\nEnable: Set the date to today to make the account active.",
             "Type": "Text",
             "MappingActions": [
                 {
                     "MapForActions": [
                         "Create"
                     ],
-                    "MappingMode": "Complex",
-                    "Value": "\"function getActivationDate(){\\r\\n    let activationDate = Person.PrimaryContract.StartDate;\\r\\n\\r\\n    // Extract date components\\r\\n    let month = ('0' + (activationDate.getMonth() + 1)).slice(-2);\\r\\n    let day = ('0' + activationDate.getDate()).slice(-2);\\r\\n    let year = activationDate.getFullYear();\\r\\n    let hours = ('0' + activationDate.getHours()).slice(-2);\\r\\n    let minutes = ('0' + activationDate.getMinutes()).slice(-2);\\r\\n    let seconds = ('0' + activationDate.getSeconds()).slice(-2);\\r\\n\\r\\n    // Format the date to 'MM/DD/YYYY HH:mm:ss'\\r\\n    let formattedDate = `${month}/${day}/${year} ${hours}:${minutes}:${seconds}`;\\r\\n\\r\\n    return formattedDate;\\r\\n}\\r\\n\\r\\ngetActivationDate();\"",
+                    "MappingMode": "Fixed",
+                    "Value": "\"12/01/2099 00:00:00\"",
                     "UsedInNotifications": false,
-                    "StoreInAccountData": true
+                    "StoreInAccountData": false
+                },
+                {
+                    "MapForActions": [
+                        "Enable"
+                    ],
+                    "MappingMode": "Complex",
+                    "Value": "\"function getActivationDate(){\\r\\n    let activationDate = new Date();\\r\\n\\r\\n    // Extract date components\\r\\n    let month = ('0' + (activationDate.getMonth() + 1)).slice(-2);\\r\\n    let day = ('0' + activationDate.getDate()).slice(-2);\\r\\n    let year = activationDate.getFullYear();\\r\\n\\r\\n    // Format the date to 'MM/DD/YYYY HH:mm:ss'\\r\\n    let formattedDate = `${month}/${day}/${year} 00:00:00`;\\r\\n\\r\\n    return formattedDate;\\r\\n}\\r\\n\\r\\ngetActivationDate();\"",
+                    "UsedInNotifications": false,
+                    "StoreInAccountData": false
                 }
             ]
         },
         {
             "Name": "dtExpiration",
-            "Description": "Long term expiration date of the user data and access permission in the format MM/DD/YYYY HH:MM:SS.\nExample: 06/31/2030 01:00:00.\nNote: Null (or none mapping) will result in no expiration.",
+            "Description": "Date and time of the key in the format MM/DD/YYYY HH:MM:SS.\nExample: 06/30/2017 00:00:00.\nNote: Empty will result in no expiration.\nCreate: Empty to make sure there is no expiration date.\nEnable: Empty to make sure there is no expiration date.\nDisable: Set the date to yesterday to make the account inactive.",
             "Type": "Text",
             "MappingActions": [
                 {
                     "MapForActions": [
-                        "Create"
+                        "Create",
+                        "Enable"
                     ],
-                    "MappingMode": "None",
-                    "Value": "\"\"",
+                    "MappingMode": "Fixed",
+                    "Value": "\"NULL\"",
                     "UsedInNotifications": false,
-                    "StoreInAccountData": true
+                    "StoreInAccountData": false
+                },
+                {
+                    "MapForActions": [
+                        "Disable"
+                    ],
+                    "MappingMode": "Complex",
+                    "Value": "\"function getExpirationDate() {\\r\\n    let now = new Date();\\r\\n    let expirationDate = new Date();\\r\\n    expirationDate.setDate(now.getDate() - 1);\\r\\n\\r\\n    // Extract date components\\r\\n    let month = ('0' + (expirationDate.getMonth() + 1)).slice(-2);\\r\\n    let day = ('0' + expirationDate.getDate()).slice(-2);\\r\\n    let year = expirationDate.getFullYear();\\r\\n\\r\\n    // Format the date to 'MM/DD/YYYY HH:mm:ss'\\r\\n    let formattedDate = `${month}/${day}/${year} 00:00:00`;\\r\\n\\r\\n    return formattedDate;\\r\\n}\\r\\n\\r\\ngetExpirationDate();\"",
+                    "UsedInNotifications": false,
+                    "StoreInAccountData": false
                 }
             ]
         },
