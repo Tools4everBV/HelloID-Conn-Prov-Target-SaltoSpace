@@ -187,7 +187,8 @@ If you are upgrading from an older version of this connector, the staging table 
 ### Step 2: Update the Salto import definition
 
 Adjust the Salto import definition so that it matches the renamed fields in the staging table.  
-Make sure the field order and mapping is identical to the schema in `createStagingDBTable.sql`.
+Do not change the column order in SQL during migration — the order must remain the same as before.  
+If the column order is changed, the Salto import job definition must also be updated.
 
 ### Step 3: Disable the Salto import job temporarily
 
