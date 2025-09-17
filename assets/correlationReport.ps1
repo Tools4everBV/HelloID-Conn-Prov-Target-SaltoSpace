@@ -82,7 +82,7 @@ function Invoke-SQLQuery {
 
         # Connect to the SQL server
         $SqlConnection = [System.Data.SqlClient.SqlConnection]::new()
-        $SqlConnection.ConnectionString = “$ConnectionString”
+        $SqlConnection.ConnectionString = "$ConnectionString"
         if (-not[String]::IsNullOrEmpty($sqlCredential)) {
             $SqlConnection.Credential = $sqlCredential
         }
