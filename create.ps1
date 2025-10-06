@@ -313,7 +313,9 @@ try {
 
             # Create a list of properties to update
             $updatePropertiesList = [System.Collections.Generic.List[string]]::new()
-            $accountNewProperties = $account | Select-Object -ExcludeProperty 'ExtID'
+            $accountNewProperties = $account.PSObject.Copy()
+            $accountNewProperties.PSObject.Properties.Remove('ExtID')
+            
             Write-Warning "$($accountNewProperties | ConvertTo-Json)"
             foreach ($accountNewProperty in $accountNewProperties.PSObject.Properties) {
                 # Define the value, handling nulls and escaping single quotes
