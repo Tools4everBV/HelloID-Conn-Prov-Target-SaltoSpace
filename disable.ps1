@@ -194,7 +194,7 @@ try {
 
         # Make sure new dtExpiration > current dtActivation
         $dtExpiration = [datetime]::Parse($account.dtExpiration)
-        $dtActivation = [datetime]::Parse($correlatedAccount.dtActivation)
+        $dtActivation = [datetime]::Parse($correlatedAccount.dtActivation, [System.Globalization.CultureInfo]::GetCultureInfo("en-US"))
         if ($dtExpiration -le $dtActivation) {
             $dtActivation = $dtExpiration.AddDays(-1)
             $account | Add-Member -NotePropertyName 'dtActivation' -NotePropertyValue ($dtActivation.AddDays(-1).ToString('MM/dd/yyyy HH:mm:ss'))
