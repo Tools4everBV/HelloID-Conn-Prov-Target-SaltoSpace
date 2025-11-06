@@ -193,12 +193,14 @@ try {
         $actionMessage = "comparing current account to mapped properties"
 
         # Make sure new dtExpiration > current dtActivation
-        $dtExpiration = [datetime]::Parse($account.dtExpiration)
+        $dtExpiration = [datetime]::Parse($account.dtExpiration, [System.Globalization.CultureInfo]::GetCultureInfo("en-US"))
         $dtActivation = [datetime]::Parse($correlatedAccount.dtActivation, [System.Globalization.CultureInfo]::GetCultureInfo("en-US"))
-        if ($dtExpiration -le $dtActivation) {
+        
+        # Compare only the date parts to avoid time-related issues
+        if ($dtExpiration.Date -le $dtActivation.Date) {
             $dtActivation = $dtExpiration.AddDays(-1)
-            $account | Add-Member -NotePropertyName 'dtActivation' -NotePropertyValue ($dtActivation.AddDays(-1).ToString('MM/dd/yyyy HH:mm:ss'))
-            Write-Warning "Current dtActivation [$($correlatedAccount.dtActivation)] is later then new dtExpiration [$($account.dtExpiration)] changed dtActivation to [$($account.dtActivation)]"
+            $account | Add-Member -NotePropertyName 'dtActivation' -NotePropertyValue ($dtActivation.ToString('MM/dd/yyyy HH:mm:ss')) -Force
+            Write-Warning "Current dtActivation [$($correlatedAccount.dtActivation)] is later than or equal to new dtExpiration [$($account.dtExpiration)], changed dtActivation to [$($account.dtActivation)]"
             if ('dtActivation' -notin $accountPropertiesToCompare) { $accountPropertiesToCompare += 'dtActivation' }
         }
 
