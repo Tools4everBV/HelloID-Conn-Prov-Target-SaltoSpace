@@ -316,7 +316,6 @@ try {
             $accountNewProperties = $account.PSObject.Copy()
             $accountNewProperties.PSObject.Properties.Remove('ExtID')
             
-            Write-Warning "$($accountNewProperties | ConvertTo-Json)"
             foreach ($accountNewProperty in $accountNewProperties.PSObject.Properties) {
                 # Define the value, handling nulls and escaping single quotes
                 $value = if (([String]::IsNullOrEmpty($accountNewProperty.Value)) -or $accountNewProperty.Value -eq 'NULL') {
