@@ -53,7 +53,8 @@
             "MappingActions": [
                 {
                     "MapForActions": [
-                        "Create"
+                        "Create",
+                        "Update"
                     ],
                     "MappingMode": "Fixed",
                     "Value": "\"1\"",
@@ -201,7 +202,8 @@
             "MappingActions": [
                 {
                     "MapForActions": [
-                        "Create"
+                        "Create",
+                        "Update"
                     ],
                     "MappingMode": "Fixed",
                     "Value": "\"2\"",
@@ -302,7 +304,8 @@
             "MappingActions": [
                 {
                     "MapForActions": [
-                        "Create"
+                        "Create",
+                        "Update"
                     ],
                     "MappingMode": "Fixed",
                     "Value": "\"0\"",
