@@ -106,8 +106,6 @@ try {
     Invoke-SQLQuery @getSaltozoneSplatParams -Data ([ref]$getSaltoZonesResponse)
     $saltoZones = $getSaltoZonesResponse
 
-    write-verbose -verbose ($saltoZones | out-string)
-
     Write-Information "Queried zones. Result count: $(($saltoZones | Measure-Object).Count)"
     #endregion Get zone
 

@@ -148,7 +148,7 @@ try {
     }
     $getSaltoZonesResponse = [System.Collections.ArrayList]::new()
     Invoke-SQLQuery @getSaltoZonesSplatParams -Data ([ref]$getSaltoZonesResponse)
-    $saltoZonesFiltered = $getSaltoZonesResponse | Where-Object { $_.Group_ExtID -ne $null -or $_.Group_ExtID -ne '' }
+    $saltoZonesFiltered = $getSaltoZonesResponse | Where-Object { $_.ExtZoneID -ne $null -or $_.ExtZoneID -ne '' }
     Write-Information "Successfully queried [$($saltoZonesFiltered.count)] existing zones"
 
     $actionMessage = "querying memberships from Salto DB"
@@ -172,18 +172,18 @@ try {
     }
     $getSaltoMembershipsResponse = [System.Collections.ArrayList]::new()
     Invoke-SQLQuery @getSaltoMembershipsSplatParams -Data ([ref]$getSaltoMembershipsResponse)
-    $saltoMembershipsGrouped = $getSaltoMembershipsResponse | Group-Object -Property 'Group_ExtID' -AsHashTable -AsString
+    $saltoMembershipsGrouped = $getSaltoMembershipsResponse | Group-Object -Property 'Zone_ExtID' -AsHashTable -AsString
     Write-Information "Successfully queried [$($getSaltoMembershipsResponse.count)] existing memberships"
 
     foreach ($permission in $saltozoneFiltered) {
-        $matchingMemberships = $saltoMembershipsGrouped[$permission.Group_ExtID].User_ExtID
+        $matchingMemberships = $saltoMembershipsGrouped[$permission.ExtZoneID].User_ExtID
         if (-not [string]::IsNullOrEmpty($matchingMemberships)) {
             Write-Output @{
                 AccountReferences   = @(
                     $matchingMemberships
                 )
                 PermissionReference = @{
-                    ExtID = $permission.Group_ExtID
+                    ExtID = $permission.ExtZoneID
                 }       
                 Description         = $permission.Description
                 DisplayName         = $permission.Name
