@@ -5,9 +5,6 @@
 > Fields in the SaltoSpace connector have been updated.  
 > Please see the [Migration](#migration) section for instructions on how to upgrade safely.  
 
-> [!WARNING]  
-> This script is for the new PowerShell connector. Make sure to use the mapping and correlation keys as described in this readme. For more information, please read our [documentation](https://docs.helloid.com/en/provisioning/target-systems/powershell-v2-target-systems.html).
-
 > [!IMPORTANT]  
 > This repository contains only the connector and configuration code. The implementer is responsible for acquiring connection details such as the username, password, certificate, etc. You may also need to sign a contract or agreement with the supplier before implementing this connector. Please contact the client's application manager to coordinate the connector requirements.
 
@@ -56,13 +53,13 @@ The connector handles:
 
 The following features are available:
 
-| Feature                                   | Supported | Actions                                 | Remarks                                                                                                                                   |
-| ----------------------------------------- | --------- | --------------------------------------- | ----------------------------------------------------------------------------------------------------------------------------------------- |
-| **Account Lifecycle**                     | ✅         | Create, Update, Enable, Disable, Delete | Enable and Disable are managed by setting `dtActivation` and `dtExpiration`.                                                              |
-| **Permissions**                           | ✅         | Retrieve, Grant, Revoke                 | Importing permissions requires adding the Permission Grant script in the 'Update action script' section.                                                               |
-| **Resources**                             | ❌         | -                                       |                                                                                                                                           |
-| **Entitlement Import: Accounts**          | ✅         | -                                       | After importing account entitlements, run Update Account first to prevent errors and dependency issues.|
-| **Entitlement Import: Permissions**       | ✅         | -                                       | Importing permissions requires adding the Permission Grant script in the 'Update action script' section. |
+| Feature                                   | Supported | Actions                                 | Remarks                                                                                                                                |
+| ----------------------------------------- | --------- | --------------------------------------- | -------------------------------------------------------------------------------------------------------------------------------------- |
+| **Account Lifecycle**                     | ✅         | Create, Update, Enable, Disable, Delete | Enable and Disable are managed by setting `dtActivation` and `dtExpiration`.                                                           |
+| **Permissions**                           | ✅         | Retrieve, Grant, Revoke                 | Importing permissions requires adding the Permission Grant script in the 'Update action script' section.                               |
+| **Resources**                             | ❌         | -                                       |                                                                                                                                        |
+| **Entitlement Import: Accounts**          | ✅         | -                                       | After importing account entitlements, run Update Account first to prevent errors and dependency issues.                                |
+| **Entitlement Import: Permissions**       | ✅         | -                                       | Importing permissions requires adding the Permission Grant script in the 'Update action script' section.                               |
 | **Governance Reconciliation Resolutions** | ✅         | -                                       | Direct reconciliation actions in Salto are not supported because HelloID only manages the staging database and not the Salto Database. |
 
 ## Requirements
@@ -158,11 +155,11 @@ The field mapping can be imported by using the _fieldMapping.json_ file.
 
 ### Connection Settings
 
-| Setting                                      | Description                                                                                                                                                                                      | Mandatory |
-| -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | --------- |
-| **Salto Database Connection string**         | The connection string used to connect to the Salto SQL database.                                                                                                                                 | Yes       |
-| **Salto Staging Database Connection string** | The connection string used to connect to the Salto Staging SQL database.                                                                                                                         | Yes       |
-| **Salto staging table name**                 | The name of the Salto staging table.                                                                                                                                                             | Yes       |
+| Setting                                      | Description                                                                                                                                                                                 | Mandatory |
+| -------------------------------------------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- | --------- |
+| **Salto Database Connection string**         | The connection string used to connect to the Salto SQL database.                                                                                                                            | Yes       |
+| **Salto Staging Database Connection string** | The connection string used to connect to the Salto Staging SQL database.                                                                                                                    | Yes       |
+| **Salto staging table name**                 | The name of the Salto staging table.                                                                                                                                                        | Yes       |
 | **Username**                                 | Optional: The username of the SQL user to use in the connection string. Note: Not compatible with `Trusted_Connection=True` in the connection string as it requires Windows Authentication. | No        |
 | **Password**                                 | Optional: The password of the SQL user to use in the connection string. Note: Not compatible with `Trusted_Connection=True` in the connection string as it requires Windows Authentication. | No        |
 
@@ -172,17 +169,17 @@ If you are upgrading from an older version of this connector, the staging table 
 
 ### Step 1: Rename fields in the SQL staging table
 
-| Old field name             | New field name        |
-| -------------------------- | --------------------- |
-| `ExtUserID`                | `ExtID`               |
-| `UserActivation`           | `dtActivation`        |
-| `UserExpiration.ExpDate`   | `dtExpiration`        |
-| `GPF1`                     | `Dummy1`              |
-| `GPF2`                     | `Dummy2`              |
-| `GPF3`                     | `Dummy3`              |
-| `GPF4`                     | `Dummy4`              |
-| `GPF5`                     | `Dummy5`              |
-| `Antipassback`             | `AntipassbackEnabled` |
+| Old field name           | New field name        |
+| ------------------------ | --------------------- |
+| `ExtUserID`              | `ExtID`               |
+| `UserActivation`         | `dtActivation`        |
+| `UserExpiration.ExpDate` | `dtExpiration`        |
+| `GPF1`                   | `Dummy1`              |
+| `GPF2`                   | `Dummy2`              |
+| `GPF3`                   | `Dummy3`              |
+| `GPF4`                   | `Dummy4`              |
+| `GPF5`                   | `Dummy5`              |
+| `Antipassback`           | `AntipassbackEnabled` |
 
 ### Step 2: Update the Salto import definition
 
