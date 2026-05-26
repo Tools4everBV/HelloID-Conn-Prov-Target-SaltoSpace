@@ -140,6 +140,8 @@ try {
             ,tb_Zones.ExtZoneID
         FROM
             [dbo].[tb_Zones]
+        WHERE
+            [Status] = '1'
         ORDER BY
             Name
         "
@@ -165,7 +167,7 @@ try {
         FROM
             tb_Users_Zones      
             INNER JOIN [dbo].[tb_Users_Ext] ON tb_Users_Ext.id_user = tb_Users_Zones.id_user
-            INNER JOIN [dbo].[tb_Zones_Ext] ON tb_Zones_Ext.id_zone = tb_Users_Zones.id_zone
+            INNER JOIN [dbo].[tb_Zones] ON tb_Zones.id_Zone = tb_Users_Zones.id_Zone
         "
         Verbose          = $false
         ErrorAction      = "Stop"
@@ -175,7 +177,7 @@ try {
     $saltoMembershipsGrouped = $getSaltoMembershipsResponse | Group-Object -Property 'Zone_ExtID' -AsHashTable -AsString
     Write-Information "Successfully queried [$($getSaltoMembershipsResponse.count)] existing memberships"
 
-    foreach ($permission in $saltozoneFiltered) {
+    foreach ($permission in $saltoZonesFiltered) {
         $matchingMemberships = $saltoMembershipsGrouped[$permission.ExtZoneID].User_ExtID
         if (-not [string]::IsNullOrEmpty($matchingMemberships)) {
             Write-Output @{
@@ -185,8 +187,6 @@ try {
                 PermissionReference = @{
                     ExtID = $permission.ExtZoneID
                 }       
-                Description         = $permission.Description
-                DisplayName         = $permission.Name
             }
         }
     }

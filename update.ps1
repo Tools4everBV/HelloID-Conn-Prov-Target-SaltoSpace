@@ -232,7 +232,8 @@ try {
                 Password         = $actionContext.Configuration.password
                 SqlQuery         = "
                 SELECT
-                    tb_Users.dtActivation
+                    tb_Users.dtActivation,
+                    tb_Users.AuditOpenings
                 FROM
                     [dbo].[tb_Users]
                     INNER JOIN [dbo].[tb_Users_Ext] ON tb_Users.id_user = tb_Users_Ext.id_user
@@ -258,6 +259,9 @@ try {
             else {
                 $account | Add-Member -NotePropertyName 'dtActivation' -NotePropertyValue '12/01/2099 00:00:00' -Force
             }
+
+            # Make sure AuditOpenings value is correlated instead of overwritten
+            $account | Add-Member -NotePropertyName 'AuditOpenings' -NotePropertyValue $getSaltoAccountResponse.AuditOpenings -Force
 
             $actionMessage = "creating account with FirstName [$($account.FirstName)] and LastName [$($account.LastName)]"
 

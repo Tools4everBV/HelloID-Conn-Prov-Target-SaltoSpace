@@ -95,6 +95,8 @@ try {
             ,tb_Zones.ExtZoneID
         FROM
             [dbo].[tb_Zones]
+        WHERE
+            [Status] = '1'
         "
         Verbose          = $false
         ErrorAction      = "Stop"

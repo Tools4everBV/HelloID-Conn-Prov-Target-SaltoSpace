@@ -171,7 +171,8 @@ try {
         Password         = $actionContext.Configuration.password
         SqlQuery         = "
         SELECT
-            tb_Users_Ext.ExtID
+            tb_Users_Ext.ExtID,
+            tb_Users.AuditOpenings
         FROM
             [dbo].[tb_Users]
             INNER JOIN [dbo].[tb_Users_Ext] ON tb_Users.id_user = tb_Users_Ext.id_user
@@ -233,6 +234,9 @@ try {
     if (($correlatedAccount | Measure-Object).count -gt 0) {
         $correlatedAccount = ConvertTo-FlatObject -Object $correlatedAccount
     }
+    if (($getSaltoAccountResponse | Measure-Object).count -gt 0) {
+        $getSaltoAccountResponse = ConvertTo-FlatObject -Object $getSaltoAccountResponse
+    }
     
     #region Calulate action
     $actionMessage = "calculating action"
@@ -265,6 +269,11 @@ try {
             }
             else {
                 $account.ExtID = $personContext.Person.ExternalId
+            }
+
+            # Make sure AuditOpenings value is correlated instead of overwritten
+            if (($account.PSObject.Properties.Name -Contains 'AuditOpenings') -and (($getSaltoAccountResponse | Measure-Object).count -eq 1)) {
+                $account.AuditOpenings = $getSaltoAccountResponse.AuditOpenings
             }
             
             $createAccountSplatParams = @{
