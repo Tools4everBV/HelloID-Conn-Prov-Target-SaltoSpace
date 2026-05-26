@@ -255,13 +255,13 @@ try {
             if (($getSaltoAccountResponse | Measure-Object).count -gt 0) {
                 $getSaltoAccountResponse = ConvertTo-FlatObject -Object $getSaltoAccountResponse
                 $account | Add-Member -NotePropertyName 'dtActivation' -NotePropertyValue $getSaltoAccountResponse.dtActivation -Force
+                # Make sure AuditOpenings value is correlated instead of overwritten
+                $account | Add-Member -NotePropertyName 'AuditOpenings' -NotePropertyValue $getSaltoAccountResponse.AuditOpenings -Force
             }
             else {
                 $account | Add-Member -NotePropertyName 'dtActivation' -NotePropertyValue '12/01/2099 00:00:00' -Force
+                $account | Add-Member -NotePropertyName 'AuditOpenings' -NotePropertyValue '1' -Force
             }
-
-            # Make sure AuditOpenings value is correlated instead of overwritten
-            $account | Add-Member -NotePropertyName 'AuditOpenings' -NotePropertyValue $getSaltoAccountResponse.AuditOpenings -Force
 
             $actionMessage = "creating account with FirstName [$($account.FirstName)] and LastName [$($account.LastName)]"
 
