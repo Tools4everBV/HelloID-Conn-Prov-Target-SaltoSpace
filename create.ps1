@@ -275,6 +275,9 @@ try {
             if (($account.PSObject.Properties.Name -Contains 'AuditOpenings') -and (($getSaltoAccountResponse | Measure-Object).count -eq 1)) {
                 $account.AuditOpenings = $getSaltoAccountResponse.AuditOpenings
             }
+            if (($account.PSObject.Properties.Name -Contains 'NewKeyIsCancellableThroughBL') -and (($getSaltoAccountResponse | Measure-Object).count -eq 1)) {
+                $account.NewKeyIsCancellableThroughBL = $getSaltoAccountResponse.NewKeyIsCancellableThroughBL
+            }
             
             $createAccountSplatParams = @{
                 ConnectionString = $actionContext.Configuration.connectionStringStaging

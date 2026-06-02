@@ -233,7 +233,8 @@ try {
                 SqlQuery         = "
                 SELECT
                     tb_Users.dtActivation,
-                    tb_Users.AuditOpenings
+                    tb_Users.AuditOpenings,
+                    tb_Users.IsCancellable
                 FROM
                     [dbo].[tb_Users]
                     INNER JOIN [dbo].[tb_Users_Ext] ON tb_Users.id_user = tb_Users_Ext.id_user
@@ -252,15 +253,17 @@ try {
             Write-Information "Queried account where [$($correlationField)] = [$($correlationValue)] from Salto DB. Result: $($getSaltoAccountResponse | ConvertTo-Json)"
 
             # Make sure to use the same Activation date that is used in Salto
-            if (($getSaltoAccountResponse | Measure-Object).count -gt 0) {
+            if (($getSaltoAccountResponse | Measure-Object).count -eq 1) {
                 $getSaltoAccountResponse = ConvertTo-FlatObject -Object $getSaltoAccountResponse
                 $account | Add-Member -NotePropertyName 'dtActivation' -NotePropertyValue $getSaltoAccountResponse.dtActivation -Force
-                # Make sure AuditOpenings value is correlated instead of overwritten
                 $account | Add-Member -NotePropertyName 'AuditOpenings' -NotePropertyValue $getSaltoAccountResponse.AuditOpenings -Force
+                $account | Add-Member -NotePropertyName 'NewKeyIsCancellableThroughBL' -NotePropertyValue $getSaltoAccountResponse.IsCancellable -Force
+            }
+            elseif (($getSaltoAccountResponse | Measure-Object).count -eq 0) {
+                throw "No account found where [$($correlationField)] = [$($correlationValue)] in Salto DB. Use 'Retry grant' to (re)create the account with the correct mapping"
             }
             else {
-                $account | Add-Member -NotePropertyName 'dtActivation' -NotePropertyValue '12/01/2099 00:00:00' -Force
-                $account | Add-Member -NotePropertyName 'AuditOpenings' -NotePropertyValue '1' -Force
+                throw "Multiple accounts found where [$($correlationField)] = [$($correlationValue)] in Salto DB. Please correct this to ensure the correlation results in a single unique account."
             }
 
             $actionMessage = "creating account with FirstName [$($account.FirstName)] and LastName [$($account.LastName)]"
