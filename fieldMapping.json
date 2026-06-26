@@ -16,7 +16,7 @@
                     "MappingMode": "Fixed",
                     "Value": "\"3\"",
                     "UsedInNotifications": false,
-                    "StoreInAccountData": true
+                    "StoreInAccountData": false
                 },
                 {
                     "MapForActions": [
@@ -42,13 +42,13 @@
                     "MappingMode": "Fixed",
                     "Value": "\"0\"",
                     "UsedInNotifications": false,
-                    "StoreInAccountData": true
+                    "StoreInAccountData": false
                 }
             ]
         },
         {
             "Name": "AuditOpenings",
-            "Description": "All the openings are registered within the user’s key.\n0 = OFF: Audit openings are disabled.\n1 = ON: Audit openings are enabled.\n\nNote: SALTO STRONGLY RECOMMENDS = 1",
+            "Description": "When a user is correlated the value in Salto is used for a insert.\n\nAll the openings are registered within the user’s key.\n0 = OFF: Audit openings are disabled.\n1 = ON: Audit openings are enabled.\n\nNote: SALTO STRONGLY RECOMMENDS = 1",
             "Type": "Text",
             "MappingActions": [
                 {
@@ -58,7 +58,7 @@
                     "MappingMode": "Fixed",
                     "Value": "\"1\"",
                     "UsedInNotifications": false,
-                    "StoreInAccountData": true
+                    "StoreInAccountData": false
                 }
             ]
         },
@@ -75,7 +75,7 @@
                     "MappingMode": "Fixed",
                     "Value": "\"HelloID\"",
                     "UsedInNotifications": false,
-                    "StoreInAccountData": true
+                    "StoreInAccountData": false
                 }
             ]
         },
@@ -92,7 +92,7 @@
                     "MappingMode": "Field",
                     "Value": "\"Person.ExternalId\"",
                     "UsedInNotifications": false,
-                    "StoreInAccountData": true
+                    "StoreInAccountData": false
                 }
             ]
         },
@@ -103,12 +103,13 @@
             "MappingActions": [
                 {
                     "MapForActions": [
-                        "Create"
+                        "Create",
+                        "Update"
                     ],
-                    "MappingMode": "None",
-                    "Value": "null",
+                    "MappingMode": "Complex",
+                    "Value": "\"function getDummy3() {\\n    let department = '';\\n    if (typeof Person.PrimaryContract.Department.DisplayName !== 'undefined' && Person.PrimaryContract.Department.DisplayName) {\\n        department = Person.PrimaryContract.Department.DisplayName;\\n        department = department.substring(0, 32);\\n    }\\n    return department;\\n}\\n\\ngetDummy3();\"",
                     "UsedInNotifications": false,
-                    "StoreInAccountData": true
+                    "StoreInAccountData": false
                 }
             ]
         },
@@ -124,7 +125,7 @@
                     "MappingMode": "None",
                     "Value": "null",
                     "UsedInNotifications": false,
-                    "StoreInAccountData": true
+                    "StoreInAccountData": false
                 }
             ]
         },
@@ -140,7 +141,7 @@
                     "MappingMode": "None",
                     "Value": "null",
                     "UsedInNotifications": false,
-                    "StoreInAccountData": true
+                    "StoreInAccountData": false
                 }
             ]
         },
@@ -173,7 +174,7 @@
                     "MappingMode": "Field",
                     "Value": "\"Person.Name.NickName\"",
                     "UsedInNotifications": false,
-                    "StoreInAccountData": true
+                    "StoreInAccountData": false
                 }
             ]
         },
@@ -190,7 +191,7 @@
                     "MappingMode": "Complex",
                     "Value": "\"// generateSurnameOption1.js [https://github.com/Tools4everBV/HelloID-Lib-Prov-HelperFunctions/blob/master/Javascript/Target/Surname_Lastname/Scripts/generateSurnameOption1.js]\\r\\n//\\r\\n// Mapping logic to generate the Surname according to the following convention.\\r\\n// B\\tvan den Boele\\r\\n// BP\\tvan den Boele – de Vries\\r\\n// P\\tde Vries\\r\\n// PB   de Vries – van den Boele\\r\\nfunction generateSurname() {\\r\\n    let nickName = Person.Name.NickName;\\r\\n    let middleName = Person.Name.FamilyNamePrefix;\\r\\n    let lastName = Person.Name.FamilyName;\\r\\n    let middleNamePartner = Person.Name.FamilyNamePartnerPrefix;\\r\\n    let lastNamePartner = Person.Name.FamilyNamePartner;\\r\\n    let convention = Person.Name.Convention;\\r\\n\\r\\n    let surName = '';\\r\\n    switch (convention) {\\r\\n        case \\\"BP\\\":\\r\\n            if (typeof middleName !== 'undefined' && middleName) { surName = surName + middleName + ' ' }\\r\\n            surName = surName + lastName;\\r\\n\\r\\n            surName = surName + ' - ';\\r\\n            if (typeof middleNamePartner !== 'undefined' && middleNamePartner) { surName = surName + middleNamePartner + ' ' }\\r\\n            surName = surName + lastNamePartner;\\r\\n            break;\\r\\n        case \\\"PB\\\":\\r\\n            if (typeof middleNamePartner !== 'undefined' && middleNamePartner) { surName = surName + middleNamePartner + ' ' }\\r\\n            surName = surName + lastNamePartner;\\r\\n\\r\\n            surName = surName + ' - ';\\r\\n            if (typeof middleName !== 'undefined' && middleName) { surName = surName + middleName + ' ' }\\r\\n            surName = surName + lastName;\\r\\n            break;\\r\\n        case \\\"P\\\":\\r\\n            if (typeof middleNamePartner !== 'undefined' && middleNamePartner) { surName = surName + middleNamePartner + ' ' }\\r\\n            surName = surName + lastNamePartner;\\r\\n            break;\\r\\n        case \\\"B\\\":\\r\\n        default:\\r\\n            if (typeof middleName !== 'undefined' && middleName) { surName = surName + middleName + ' ' }\\r\\n            surName = surName + lastName;\\r\\n            break;\\r\\n    }\\r\\n    // Trim spaces at start and end\\r\\n    surName = surName.trim();\\r\\n\\r\\n    // Shorten string to maxAttributeLength \\r\\n    const maxAttributeLength = 64;\\r\\n    surName = surName.substring(0, maxAttributeLength);\\r\\n\\r\\n    return surName;\\r\\n}\\r\\n\\r\\ngenerateSurname();\"",
                     "UsedInNotifications": false,
-                    "StoreInAccountData": true
+                    "StoreInAccountData": false
                 }
             ]
         },
@@ -206,7 +207,7 @@
                     "MappingMode": "Fixed",
                     "Value": "\"2\"",
                     "UsedInNotifications": false,
-                    "StoreInAccountData": true
+                    "StoreInAccountData": false
                 }
             ]
         },
@@ -220,10 +221,10 @@
                         "Create",
                         "Update"
                     ],
-                    "MappingMode": "Field",
-                    "Value": "\"Person.Contact.Business.Phone.Fixed\"",
+                    "MappingMode": "Complex",
+                    "Value": "\"function getPhoneNumber() {\\r\\n    let phoneNumber = null;\\r\\n\\r\\n    if (typeof Person.Contact.Business.Phone.Mobile !== 'undefined' && Person.Contact.Business.Phone.Mobile) {\\r\\n        phoneNumber = Person.Contact.Business.Phone.Mobile;\\r\\n        phoneNumber = phoneNumber.replace(/\\\\s/g, '');\\r\\n        phoneNumber = phoneNumber.replace(/-/g, '');\\r\\n        phoneNumber = phoneNumber.replace(/[()]/g, '');\\r\\n        if (phoneNumber.startsWith('+31')) {\\r\\n        }\\r\\n        else if (phoneNumber.startsWith('31')) {\\r\\n            phoneNumber = '+' + phoneNumber;\\r\\n        }\\r\\n        else if (phoneNumber.startsWith('0')) {\\r\\n            phoneNumber = '+31' + phoneNumber.substring(1);\\r\\n        }\\r\\n        else {\\r\\n            phoneNumber = '+31' + phoneNumber;\\r\\n        }\\r\\n    }\\r\\n    return phoneNumber;\\r\\n\\r\\n}\\r\\ngetPhoneNumber();\"",
                     "UsedInNotifications": false,
-                    "StoreInAccountData": true
+                    "StoreInAccountData": false
                 }
             ]
         },
@@ -240,7 +241,7 @@
                     "MappingMode": "Field",
                     "Value": "\"Person.ExternalId\"",
                     "UsedInNotifications": false,
-                    "StoreInAccountData": true
+                    "StoreInAccountData": false
                 }
             ]
         },
@@ -307,7 +308,7 @@
                     "MappingMode": "Fixed",
                     "Value": "\"0\"",
                     "UsedInNotifications": false,
-                    "StoreInAccountData": true
+                    "StoreInAccountData": false
                 }
             ]
         }

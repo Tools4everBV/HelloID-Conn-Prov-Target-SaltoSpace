@@ -25,6 +25,8 @@
     - [`dtExpiration` and `dtActivation` Fields](#dtexpiration-and-dtactivation-fields)
     - [`MobileAppType` Field](#mobileapptype-field)
     - [Staging Database Behavior](#staging-database-behavior)
+    - [AuditOpenings](#auditopenings)
+    - [NewKeyIsCancellableThroughBL](#newkeyiscancellablethroughbl)
   - [Getting Started](#getting-started)
     - [Salto Staging Database](#salto-staging-database)
     - [Salto Import Job](#salto-import-job)
@@ -88,6 +90,7 @@ The following features are available:
 
 - The `name` field in Salto must be unique and is built from the combination of `Title`, `FirstName`, and `LastName`.
 - To ensure uniqueness, it is recommended to include the employee ID in one of these fields.
+- The fields that make a Salto person unique `User ID configuration` can be configured in Salto `General options, users`. We recommend the fields above.
 
 ### Import Account `dtExpiration`
 
@@ -113,6 +116,12 @@ if ($account.dtExpiration -eq '01/01/2000 00:00:00') {
 
 - Since data is written to a staging database that Salto processes independently, HelloID is not informed of any errors that occur during Salto’s processing.
 - Additionally, any manual changes made directly in the Salto database will be overwritten during the next synchronization with the staging database.
+
+### AuditOpenings
+When the `AuditOpenings` field is updated in Salto, the card must be re-encoded. To prevent this, the connector correlates the existing value from Salto when a user is found in the database and inserted into the staging table.
+
+### NewKeyIsCancellableThroughBL
+The `NewKeyIsCancellableThroughBL` field cannot be updated when a user already have a tag. To prevent the incorrect value, the connector correlates the existing value from Salto (`IsCancellable`) when a user is found in the database and inserted into the staging 
 
 ## Getting Started
 
@@ -202,9 +211,6 @@ Re-enable the job once the staging table and import definition are fully updated
 >
 > [!TIP]
 > _For more information on how to configure a HelloID PowerShell connector, please refer to our [documentation](https://docs.helloid.com/en/provisioning/target-systems/powershell-v2-target-systems.html) pages_.
-
-> [!TIP]
-> _If you need help, feel free to ask questions on our [forum](https://forum.helloid.com)_.
 
 ## HelloID Docs
 

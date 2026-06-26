@@ -2,6 +2,15 @@
 
 All notable changes to this project will be documented in this file. The format is based on [Keep a Changelog](https://keepachangelog.com), and this project adheres to [Semantic Versioning](https://semver.org).
 
+## [2.3.0] - 26-05-2026
+Fix zone import permissions and memberships.
+Added example to field mapping dummy3 with `substring` to 32 char.
+Removed DisplayName and Description from import permission memberships scripts.
+Fix import account access calculation when `WithExpiration` bool was off.
+Added support to correlate the value of `AuditOpenings`, [#14](https://github.com/Tools4everBV/HelloID-Conn-Prov-Target-SaltoSpace/issues/14).
+Added complex mapping to the `PhoneNumber` field to make sure the value always start with `+31`.
+Added support to correlate the value of `NewKeyIsCancellableThroughBL`.
+
 ## [2.2.0] - 05-05-2026
 Add zone permissions support
 

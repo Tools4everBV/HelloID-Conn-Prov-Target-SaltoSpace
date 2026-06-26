@@ -6,6 +6,12 @@
 # Enable TLS1.2
 [System.Net.ServicePointManager]::SecurityProtocol = [System.Net.ServicePointManager]::SecurityProtocol -bor [System.Net.SecurityProtocolType]::Tls12
 
+$importFields = $($actionContext.ImportFields)
+if ('ExtID' -notin $importFields) { $importFields += 'ExtID' }
+if ('dtActivation' -notin $importFields) { $importFields += 'dtActivation' }
+if ('dtExpiration' -notin $importFields) { $importFields += 'dtExpiration' }
+if ('WithExpiration' -notin $importFields) { $importFields += 'WithExpiration' }
+
 #region functions
 function Invoke-SQLQuery {
     param(
@@ -144,14 +150,19 @@ try {
     }
     $getSaltoAccountResponse = [System.Collections.ArrayList]::new()
     Invoke-SQLQuery @getSaltoAccountSplatParams -Data ([ref]$getSaltoAccountResponse)
-    $getSaltoAccountResponse = $getSaltoAccountResponse | Select-Object $($actionContext.ImportFields)
+    $getSaltoAccountResponse = $getSaltoAccountResponse | Select-Object $importFields
     Write-Information "Successfully queried [$($getSaltoAccountResponse.count)] existing accounts"
 
+    $now = Get-Date
     foreach ($account in $getSaltoAccountResponse) {
         $account = ConvertTo-FlatObject -Object $account
+        
+        if ($account.WithExpiration -eq '0') {
+            # This setting may differ depending on your Salto configuration. Please adjust accordingly.
+            $account.dtExpiration = '01/01/2000 00:00:00'
+        }
         $dtExpiration = $account.dtExpiration
         $dtActivation = $account.dtActivation
-        $now = Get-Date
         $isActive = ($now -ge $dtActivation -and $now -le $dtExpiration)
 
         # This setting may differ depending on your Salto configuration. Please adjust accordingly.
