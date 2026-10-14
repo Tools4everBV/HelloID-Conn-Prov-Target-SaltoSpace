@@ -27,6 +27,7 @@
     - [Staging Database Behavior](#staging-database-behavior)
     - [AuditOpenings](#auditopenings)
     - [NewKeyIsCancellableThroughBL](#newkeyiscancellablethroughbl)
+    - [Testmode](#testmode)
   - [Getting Started](#getting-started)
     - [Salto Staging Database](#salto-staging-database)
     - [Salto Import Job](#salto-import-job)
@@ -123,6 +124,18 @@ When the `AuditOpenings` field is updated in Salto, the card must be re-encoded.
 ### NewKeyIsCancellableThroughBL
 The `NewKeyIsCancellableThroughBL` field cannot be updated when a user already have a tag. To prevent the incorrect value, the connector correlates the existing value from Salto (`IsCancellable`) when a user is found in the database and inserted into the staging 
 
+### Testmode
+When `Testmode` is enabled in the connection settings, the connector writes all changes to the staging table with `ToBeProcessedBySalto` set to `0`. Salto does not pick up these records, so the result can be validated in the staging table without changes being applied in Salto.
+
+> [!IMPORTANT]
+> Disabling `Testmode` does not update the records that were written while it was enabled. These records keep `ToBeProcessedBySalto` set to `0` and are not picked up by the Salto synchronization. After disabling `Testmode`, run the query below once on the staging database to set `ToBeProcessedBySalto` to `1`, so Salto processes all records.
+
+```sql
+UPDATE [dbo].[SaltoCardholdersSQLServer] -- Replace with your staging table name
+SET [ToBeProcessedBySalto] = 1
+WHERE [ToBeProcessedBySalto] = 0
+```
+
 ## Getting Started
 
 ### Salto Staging Database
@@ -171,6 +184,7 @@ The field mapping can be imported by using the _fieldMapping.json_ file.
 | **Salto staging table name**                 | The name of the Salto staging table.                                                                                                                                                        | Yes       |
 | **Username**                                 | Optional: The username of the SQL user to use in the connection string. Note: Not compatible with `Trusted_Connection=True` in the connection string as it requires Windows Authentication. | No        |
 | **Password**                                 | Optional: The password of the SQL user to use in the connection string. Note: Not compatible with `Trusted_Connection=True` in the connection string as it requires Windows Authentication. | No        |
+| **Testmode**                                 | When enabled, `ToBeProcessedBySalto` is set to `0` so Salto does not process the changes. See [Testmode](#testmode).                                                                        | No        |
 
 ## Migration
 

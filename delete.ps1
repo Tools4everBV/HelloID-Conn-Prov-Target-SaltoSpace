@@ -208,7 +208,7 @@ try {
                 SqlQuery         = "
                 UPDATE [dbo].[$($actionContext.Configuration.dbTableStaging)]
                 SET [Action] = '$($actionContext.data.Action)',
-                    [ToBeProcessedBySalto] = '1'
+                    [ToBeProcessedBySalto] = '$([int](-not $actionContext.Configuration.testmode))'
                 WHERE [ExtID] = '$($actionContext.References.Account)'
                 "
                 Verbose          = $false

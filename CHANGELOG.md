@@ -2,6 +2,12 @@
 
 All notable changes to this project will be documented in this file. The format is based on [Keep a Changelog](https://keepachangelog.com), and this project adheres to [Semantic Versioning](https://semver.org).
 
+## [2.4.0] - 14-10-2026
+Added `Testmode` setting. When enabled, `ToBeProcessedBySalto` is set to `0` so Salto does not process the changes.
+Fix group and zone membership check matching partial IDs (e.g. `5` matched `15`), by comparing against the split list instead of a wildcard match.
+Fix revoke group and zone removing partial IDs from the list (e.g. revoking `5` changed `15` into `1`).
+Fix grant zone reading the current zones from `ExtAccessLevelIDList` instead of `ExtZoneIDList`.
+
 ## [2.3.0] - 26-05-2026
 Fix zone import permissions and memberships.
 Added example to field mapping dummy3 with `substring` to 32 char.

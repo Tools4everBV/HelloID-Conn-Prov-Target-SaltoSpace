@@ -121,8 +121,13 @@ try {
     Write-Information "Queried current zones for account with ExtID [$($actionContext.References.Account | ConvertTo-Json)]. Result: $($getSaltoUserCurrentZonesResponse | ConvertTo-Json)"
     #endregion Get Current Zones of account
 
+    $currentZoneList = @()
+    if (-not [string]::IsNullOrWhiteSpace([string]$saltoUserCurrentZones)) {
+        $currentZoneList = @(([string]$saltoUserCurrentZones -split ',') | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+    }
+
     if (-not [string]::IsNullOrEmpty($getSaltoUserCurrentZonesResponse.ExtID)) {
-        if ($saltoUserCurrentZones -notlike "*$($actionContext.References.Permission.ExtID)*") {
+        if ($currentZoneList -notcontains $actionContext.References.Permission.ExtID) {
             throw "User with ExtID [$($actionContext.References.Account)] is already no longer member of zone [$($actionContext.PermissionDisplayName)] with ExtID [$($actionContext.References.Permission.ExtID)]."
         }
         else {
@@ -138,11 +143,11 @@ try {
                 [dbo].[$($actionContext.Configuration.dbTableStaging)]
             SET
                 [ExtZoneIDList] = CASE
-                    WHEN TRIM(',' FROM REPLACE(',' + [ExtZoneIDList] + ',', '$($actionContext.References.Permission.ExtID),', '')) = ''
+                    WHEN TRIM(',' FROM REPLACE(',' + [ExtZoneIDList] + ',', ',$($actionContext.References.Permission.ExtID),', ',')) = ''
                     THEN NULL
-                    ELSE TRIM(',' FROM REPLACE(',' + [ExtZoneIDList] + ',', '$($actionContext.References.Permission.ExtID),', ''))
+                    ELSE TRIM(',' FROM REPLACE(',' + [ExtZoneIDList] + ',', ',$($actionContext.References.Permission.ExtID),', ','))
                 END,
-                [ToBeProcessedBySalto] = '1'
+                [ToBeProcessedBySalto] = '$([int](-not $actionContext.Configuration.testmode))'
             WHERE
                 [ExtID] = '$($actionContext.References.Account)'
             "
