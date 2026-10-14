@@ -112,13 +112,18 @@ try {
 
     $getSaltoUserCurrentzonesResponse = [System.Collections.ArrayList]::new()
     Invoke-SQLQuery @getSaltoUserCurrentzonesSplatParams -Data ([ref]$getSaltoUserCurrentzonesResponse)
-    $saltoUserCurrentzones = $getSaltoUserCurrentzonesResponse.ExtAccessLevelIDList
+    $saltoUserCurrentzones = $getSaltoUserCurrentzonesResponse.ExtZoneIDList
 
     Write-Information "Queried current zones for account with ExtID [$($actionContext.References.Account | ConvertTo-Json)]. Result: $($getSaltoUserCurrentzonesResponse | ConvertTo-Json)"
     #endregion Get Current zones of account
 
+    $currentZoneList = @()
+    if (-not [string]::IsNullOrWhiteSpace([string]$saltoUserCurrentzones)) {
+        $currentZoneList = @(([string]$saltoUserCurrentzones -split ',') | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+    }
+
     if (-not [string]::IsNullOrEmpty($getSaltoUserCurrentzonesResponse.ExtID)) {
-        if ($saltoUserCurrentzones -like "*$($actionContext.References.Permission.ExtID)*") {
+        if ($currentZoneList -contains $actionContext.References.Permission.ExtID) {
             throw "User with ExtID [$($actionContext.References.Account)] is already member of zone [$($actionContext.PermissionDisplayName)] with ExtID [$($actionContext.References.Permission.ExtID)]."
         }
         else {
@@ -133,7 +138,7 @@ try {
                 [dbo].[$($actionContext.Configuration.dbTableStaging)]
             SET
                 [ExtZoneIDList] = TRIM(',' FROM Concat_ws(',', [ExtZoneIDList], '$($actionContext.References.Permission.ExtID)')),
-                [ToBeProcessedBySalto] = '1'
+                [ToBeProcessedBySalto] = '$([int](-not $actionContext.Configuration.testmode))'
             WHERE
                 [ExtID] = '$($actionContext.References.Account)'
             "

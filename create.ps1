@@ -287,7 +287,7 @@ try {
                 INSERT INTO
                     [dbo].[$($actionContext.Configuration.dbTableStaging)] ([$($account.PSObject.Properties.Name -join "],[")],[ToBeProcessedBySalto])
                 VALUES
-                    ($($account.PSObject.Properties.Value.ForEach({ if (($_ -eq $null -or $_ -eq 'NULL')) { 'NULL' } else { '''' + $_.Replace("'", "''") + '''' } }) -join ', '),'1')
+                    ($($account.PSObject.Properties.Value.ForEach({ if (($_ -eq $null -or $_ -eq 'NULL')) { 'NULL' } else { '''' + $_.Replace("'", "''") + '''' } }) -join ', '),'$([int](-not $actionContext.Configuration.testmode))')
                 "
                 Verbose          = $false
                 ErrorAction      = "Stop"
@@ -350,7 +350,7 @@ try {
                     [dbo].[$($actionContext.Configuration.dbTableStaging)]
                 SET
                     $(if(-NOT [string]::IsNullOrEmpty($updatePropertiesList)){($updatePropertiesList -join ',') + ','})
-                    [ToBeProcessedBySalto] = '1'
+                    [ToBeProcessedBySalto] = '$([int](-not $actionContext.Configuration.testmode))'
                 WHERE
                     [ExtID] = '$($correlatedAccount.ExtID)'
                 "
