@@ -54,5 +54,15 @@
             "description": "Optional: The username of the SQL user to use in the connection string.",
             "required": false
         }
+    },
+    {
+        "defaultValue": false,
+        "key": "testmode",
+        "templateOptions": {
+            "description": "Testmode: Sets field 'toBeProcessedBySalto' to 0 when true",
+            "label": "Testmode",
+            "required": false
+        },
+        "type": "checkbox"
     }
 ]

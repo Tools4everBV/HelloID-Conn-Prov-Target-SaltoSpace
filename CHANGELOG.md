@@ -2,6 +2,16 @@
 
 All notable changes to this project will be documented in this file. The format is based on [Keep a Changelog](https://keepachangelog.com), and this project adheres to [Semantic Versioning](https://semver.org).
 
+## [2.4.1] - 20-10-2026
+Added support for field mapping fields with a dot in their name (e.g. `stke.period`). The account object is flattened in the create script, and `Data` and `PreviousData` are rebuilt as nested objects in the update script to match the HelloID field mapping.
+Fix `NewKeyIsCancellableThroughBL` being set to `null` on correlation. The value is now read from `tb_Users.IsCancellable` and falls back to the mapped value when Salto has no value.
+
+## [2.4.0] - 14-10-2026
+Added `Testmode` setting. When enabled, `ToBeProcessedBySalto` is set to `0` so Salto does not process the changes.
+Fix group and zone membership check matching partial IDs (e.g. `5` matched `15`), by comparing against the split list instead of a wildcard match.
+Fix revoke group and zone removing partial IDs from the list (e.g. revoking `5` changed `15` into `1`).
+Fix grant zone reading the current zones from `ExtAccessLevelIDList` instead of `ExtZoneIDList`.
+
 ## [2.3.0] - 26-05-2026
 Fix zone import permissions and memberships.
 Added example to field mapping dummy3 with `substring` to 32 char.

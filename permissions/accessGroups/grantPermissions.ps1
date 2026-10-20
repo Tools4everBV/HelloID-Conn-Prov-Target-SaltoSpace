@@ -117,8 +117,13 @@ try {
     Write-Information "Queried current groups for account with ExtID [$($actionContext.References.Account | ConvertTo-Json)]. Result: $($getSaltoUserCurrentGroupsResponse | ConvertTo-Json)"
     #endregion Get Current Groups of account
 
+    $currentGroupList = @()
+    if (-not [string]::IsNullOrWhiteSpace([string]$saltoUserCurrentGroups)) {
+        $currentGroupList = @(([string]$saltoUserCurrentGroups -split ',') | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+    }
+
     if (-not [string]::IsNullOrEmpty($getSaltoUserCurrentGroupsResponse.ExtID)) {
-        if ($saltoUserCurrentGroups -like "*$($actionContext.References.Permission.ExtID)*") {
+        if ($currentGroupList -contains $actionContext.References.Permission.ExtID) {
             throw "User with ExtID [$($actionContext.References.Account)] is already member of group [$($actionContext.PermissionDisplayName)] with ExtID [$($actionContext.References.Permission.ExtID)]."
         }
         else {
@@ -134,7 +139,7 @@ try {
                 [dbo].[$($actionContext.Configuration.dbTableStaging)]
             SET
                 [ExtAccessLevelIDList] = TRIM(',' FROM Concat_ws(',', [ExtAccessLevelIDList], '$($actionContext.References.Permission.ExtID)')),
-                [ToBeProcessedBySalto] = '1'
+                [ToBeProcessedBySalto] = '$([int](-not $actionContext.Configuration.testmode))'
             WHERE
                 [ExtID] = '$($actionContext.References.Account)'
             "
