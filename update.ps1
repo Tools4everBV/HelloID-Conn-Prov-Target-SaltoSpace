@@ -88,6 +88,13 @@ function ConvertTo-FlatObject {
     foreach ($property in $Object.PSObject.Properties) {
         $name = if ($Prefix) { "$Prefix`.$($property.Name)" } else { $property.Name }
 
+        # Nested objects (mapping fields with a dot in their name) can also be supplied as a dictionary
+        if ($property.Value -is [System.Collections.IDictionary]) {
+            $nestedObject = [ordered]@{}
+            foreach ($key in $property.Value.Keys) { $nestedObject["$key"] = $property.Value[$key] }
+            $property.Value = [PSCustomObject]$nestedObject
+        }
+
         if ($property.Value -is [pscustomobject]) {
             $flattenedSubObject = ConvertTo-FlatObject -Object $property.Value -Prefix $name
             foreach ($subProperty in $flattenedSubObject.PSObject.Properties) {
@@ -123,6 +130,28 @@ function ConvertTo-FlatObject {
         }
     }
     Write-Output ([PSCustomObject]$result)
+}
+
+function ConvertFrom-FlatObject {
+    param (
+        [Parameter(Mandatory = $true)]
+        [pscustomobject] $Object
+    )
+    $result = [PSCustomObject]@{}
+
+    foreach ($property in $Object.PSObject.Properties) {
+        # Rebuild nested objects for property names with a dot (e.g. stke.period), to match the HelloID field mapping
+        $current = $result
+        $nameParts = $property.Name -split '\.'
+        for ($i = 0; $i -lt $nameParts.Count - 1; $i++) {
+            if ($null -eq $current.PSObject.Properties[$nameParts[$i]]) {
+                $current | Add-Member -NotePropertyName $nameParts[$i] -NotePropertyValue ([PSCustomObject]@{})
+            }
+            $current = $current.($nameParts[$i])
+        }
+        $current | Add-Member -NotePropertyName $nameParts[-1] -NotePropertyValue $property.Value -Force
+    }
+    Write-Output $result
 }
 #endregion
 
@@ -189,7 +218,7 @@ try {
         $account.PSObject.Properties | ForEach-Object { if ($null -eq $_.Value -or $_.Value -eq 'NULL') { $_.Value = "" } }
 
         # Set Previous data (if there are no changes between PreviousData and Data, HelloID will log "update finished with no changes")
-        $outputContext.PreviousData = $correlatedAccount
+        $outputContext.PreviousData = ConvertFrom-FlatObject -Object $correlatedAccount
 
         $accountSplatCompareProperties = @{
             ReferenceObject  = $correlatedAccount.PSObject.Properties | Where-Object { $_.Name -in $accountPropertiesToCompare }
@@ -368,7 +397,7 @@ try {
             #region No changes
             $actionMessage = "skipping updating account"
 
-            $outputContext.Data = $correlatedAccount
+            $outputContext.Data = ConvertFrom-FlatObject -Object $correlatedAccount
 
             $outputContext.AuditLogs.Add([PSCustomObject]@{
                     # Action  = "" # Optional
