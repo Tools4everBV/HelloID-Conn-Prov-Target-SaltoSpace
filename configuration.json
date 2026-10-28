@@ -59,7 +59,7 @@
         "defaultValue": false,
         "key": "testmode",
         "templateOptions": {
-            "description": "Testmode: Sets field 'toBeProcessedBySalto' to 0 when true",
+            "description": "Testmode: Sets field 'toBeProcessedBySalto' to 0 when true. Disabling Testmode does not update the records that were written while it was enabled.",
             "label": "Testmode",
             "required": false
         },
