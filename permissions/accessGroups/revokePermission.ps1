@@ -121,8 +121,13 @@ try {
     Write-Information "Queried current groups for account with ExtID [$($actionContext.References.Account | ConvertTo-Json)]. Result: $($getSaltoUserCurrentGroupsResponse | ConvertTo-Json)"
     #endregion Get Current Groups of account
 
+    $currentGroupList = @()
+    if (-not [string]::IsNullOrWhiteSpace([string]$saltoUserCurrentGroups)) {
+        $currentGroupList = @(([string]$saltoUserCurrentGroups -split ',') | ForEach-Object { $_.Trim() } | Where-Object { $_ })
+    }
+
     if (-not [string]::IsNullOrEmpty($getSaltoUserCurrentGroupsResponse.ExtID)) {
-        if ($saltoUserCurrentGroups -notlike "*$($actionContext.References.Permission.ExtID)*") {
+        if ($currentGroupList -notcontains $actionContext.References.Permission.ExtID) {
             throw "User with ExtID [$($actionContext.References.Account)] is already no longer member of group [$($actionContext.PermissionDisplayName)] with ExtID [$($actionContext.References.Permission.ExtID)]."
         }
         else {
@@ -138,11 +143,11 @@ try {
                 [dbo].[$($actionContext.Configuration.dbTableStaging)]
             SET
                 [ExtAccessLevelIDList] = CASE
-                    WHEN TRIM(',' FROM REPLACE(',' + [ExtAccessLevelIDList] + ',', '$($actionContext.References.Permission.ExtID),', '')) = ''
+                    WHEN TRIM(',' FROM REPLACE(',' + [ExtAccessLevelIDList] + ',', ',$($actionContext.References.Permission.ExtID),', ',')) = ''
                     THEN NULL
-                    ELSE TRIM(',' FROM REPLACE(',' + [ExtAccessLevelIDList] + ',', '$($actionContext.References.Permission.ExtID),', ''))
+                    ELSE TRIM(',' FROM REPLACE(',' + [ExtAccessLevelIDList] + ',', ',$($actionContext.References.Permission.ExtID),', ','))
                 END,
-                [ToBeProcessedBySalto] = '1'
+                [ToBeProcessedBySalto] = '$([int](-not $actionContext.Configuration.testmode))'
             WHERE
                 [ExtID] = '$($actionContext.References.Account)'
             "

@@ -276,7 +276,7 @@ try {
                     [dbo].[$($actionContext.Configuration.dbTableStaging)]
                 SET
                     $(if(-NOT [string]::IsNullOrEmpty($updatePropertiesList)){($updatePropertiesList -join ',') + ','})
-                    [ToBeProcessedBySalto] = '1'
+                    [ToBeProcessedBySalto] = '$([int](-not $actionContext.Configuration.testmode))'
                 WHERE
                     [ExtID] = '$($actionContext.References.Account)'
                 "

@@ -88,6 +88,13 @@ function ConvertTo-FlatObject {
     foreach ($property in $Object.PSObject.Properties) {
         $name = if ($Prefix) { "$Prefix`.$($property.Name)" } else { $property.Name }
 
+        # Nested objects (mapping fields with a dot in their name) can also be supplied as a dictionary
+        if ($property.Value -is [System.Collections.IDictionary]) {
+            $nestedObject = [ordered]@{}
+            foreach ($key in $property.Value.Keys) { $nestedObject["$key"] = $property.Value[$key] }
+            $property.Value = [PSCustomObject]$nestedObject
+        }
+
         if ($property.Value -is [pscustomobject]) {
             $flattenedSubObject = ConvertTo-FlatObject -Object $property.Value -Prefix $name
             foreach ($subProperty in $flattenedSubObject.PSObject.Properties) {
@@ -138,6 +145,8 @@ try {
     if (-Not($account.PSObject.Properties.Name -Contains 'ExtID')) {
         $account | Add-Member -NotePropertyName 'ExtID' -NotePropertyValue $null -Force
     }
+    # Flatten account object, mapping fields with a dot in their name (e.g. stke.period) are nested objects in HelloID
+    $account = ConvertTo-FlatObject -Object $account
     #endRegion account
 
     #region Verify correlation configuration and properties
@@ -172,7 +181,8 @@ try {
         SqlQuery         = "
         SELECT
             tb_Users_Ext.ExtID,
-            tb_Users.AuditOpenings
+            tb_Users.AuditOpenings,
+            tb_Users.IsCancellable
         FROM
             [dbo].[tb_Users]
             INNER JOIN [dbo].[tb_Users_Ext] ON tb_Users.id_user = tb_Users_Ext.id_user
@@ -275,8 +285,9 @@ try {
             if (($account.PSObject.Properties.Name -Contains 'AuditOpenings') -and (($getSaltoAccountResponse | Measure-Object).count -eq 1)) {
                 $account.AuditOpenings = $getSaltoAccountResponse.AuditOpenings
             }
-            if (($account.PSObject.Properties.Name -Contains 'NewKeyIsCancellableThroughBL') -and (($getSaltoAccountResponse | Measure-Object).count -eq 1)) {
-                $account.NewKeyIsCancellableThroughBL = $getSaltoAccountResponse.NewKeyIsCancellableThroughBL
+            # Make sure NewKeyIsCancellableThroughBL value is correlated instead of overwritten, fall back to the mapped value when Salto has no value
+            if (($account.PSObject.Properties.Name -Contains 'NewKeyIsCancellableThroughBL') -and (($getSaltoAccountResponse | Measure-Object).count -eq 1) -and ($null -ne $getSaltoAccountResponse.IsCancellable)) {
+                $account.NewKeyIsCancellableThroughBL = $getSaltoAccountResponse.IsCancellable
             }
             
             $createAccountSplatParams = @{
@@ -287,7 +298,7 @@ try {
                 INSERT INTO
                     [dbo].[$($actionContext.Configuration.dbTableStaging)] ([$($account.PSObject.Properties.Name -join "],[")],[ToBeProcessedBySalto])
                 VALUES
-                    ($($account.PSObject.Properties.Value.ForEach({ if (($_ -eq $null -or $_ -eq 'NULL')) { 'NULL' } else { '''' + $_.Replace("'", "''") + '''' } }) -join ', '),'1')
+                    ($($account.PSObject.Properties.Value.ForEach({ if (($_ -eq $null -or $_ -eq 'NULL')) { 'NULL' } else { '''' + $_.Replace("'", "''") + '''' } }) -join ', '),'$([int](-not $actionContext.Configuration.testmode))')
                 "
                 Verbose          = $false
                 ErrorAction      = "Stop"
@@ -350,7 +361,7 @@ try {
                     [dbo].[$($actionContext.Configuration.dbTableStaging)]
                 SET
                     $(if(-NOT [string]::IsNullOrEmpty($updatePropertiesList)){($updatePropertiesList -join ',') + ','})
-                    [ToBeProcessedBySalto] = '1'
+                    [ToBeProcessedBySalto] = '$([int](-not $actionContext.Configuration.testmode))'
                 WHERE
                     [ExtID] = '$($correlatedAccount.ExtID)'
                 "
